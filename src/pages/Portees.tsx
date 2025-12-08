@@ -1,0 +1,312 @@
+import { useState, useEffect } from 'react';
+import { MainLayout } from '@/components/layout/MainLayout';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { getPortees, getMisesBas, getTruies, addMiseBas, addPortee, getSaillies, updateTruie, updateSaillie } from '@/lib/storage';
+import { Portee, MiseBas, Truie, Saillie } from '@/types';
+import { Plus, Baby, Scale } from 'lucide-react';
+import { toast } from 'sonner';
+import { format } from 'date-fns';
+import { fr } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
+
+const statusLabels: Record<Portee['statut'], string> = {
+  allaitement: 'En allaitement',
+  sevree: 'Sevrée',
+  transferee: 'Transférée',
+};
+
+const statusColors: Record<Portee['statut'], string> = {
+  allaitement: 'bg-info/10 text-info border-info/20',
+  sevree: 'bg-success/10 text-success border-success/20',
+  transferee: 'bg-muted text-muted-foreground border-border',
+};
+
+const Portees = () => {
+  const [portees, setPortees] = useState<Portee[]>([]);
+  const [misesBas, setMisesBas] = useState<MiseBas[]>([]);
+  const [truies, setTruies] = useState<Truie[]>([]);
+  const [saillies, setSaillies] = useState<Saillie[]>([]);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    saillieId: '',
+    date: '',
+    nesVivants: '',
+    mortNes: '',
+    poidsMoyen: '',
+    notes: '',
+  });
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = () => {
+    setPortees(getPortees());
+    setMisesBas(getMisesBas());
+    setTruies(getTruies());
+    setSaillies(getSaillies());
+  };
+
+  const resetForm = () => {
+    setFormData({
+      saillieId: '',
+      date: '',
+      nesVivants: '',
+      mortNes: '',
+      poidsMoyen: '',
+      notes: '',
+    });
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.saillieId || !formData.date || !formData.nesVivants) {
+      toast.error('Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+
+    const saillie = saillies.find(s => s.id === formData.saillieId);
+    if (!saillie) return;
+
+    const newMiseBas: MiseBas = {
+      id: Date.now().toString(),
+      saillieId: formData.saillieId,
+      truieId: saillie.truieId,
+      date: formData.date,
+      nesVivants: parseInt(formData.nesVivants),
+      mortNes: parseInt(formData.mortNes) || 0,
+      poidsMoyen: parseFloat(formData.poidsMoyen) || 0,
+      notes: formData.notes,
+    };
+    
+    addMiseBas(newMiseBas);
+
+    const newPortee: Portee = {
+      id: (Date.now() + 1).toString(),
+      miseBasId: newMiseBas.id,
+      truieId: saillie.truieId,
+      nombreActuel: parseInt(formData.nesVivants),
+      dateSevrage: null,
+      poidsSevrage: null,
+      statut: 'allaitement',
+    };
+    
+    addPortee(newPortee);
+
+    // Update truie and saillie status
+    updateTruie(saillie.truieId, { statut: 'allaitante' });
+    updateSaillie(formData.saillieId, { statut: 'confirmee' });
+    
+    toast.success('Mise bas enregistrée avec succès');
+    loadData();
+    setIsDialogOpen(false);
+    resetForm();
+  };
+
+  const confirmedSaillies = saillies.filter(s => 
+    s.statut === 'confirmee' && !misesBas.some(m => m.saillieId === s.id)
+  );
+
+  return (
+    <MainLayout>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in">
+          <div>
+            <h1 className="font-display text-3xl font-bold text-foreground">Portées</h1>
+            <p className="text-muted-foreground mt-1">Gérez les mises bas et le suivi des portées</p>
+          </div>
+          <Dialog open={isDialogOpen} onOpenChange={(open) => {
+            setIsDialogOpen(open);
+            if (!open) resetForm();
+          }}>
+            <DialogTrigger asChild>
+              <Button className="gap-2" variant="success">
+                <Plus className="h-5 w-5" />
+                Enregistrer une mise bas
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="font-display">Nouvelle mise bas</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="saillieId">Saillie concernée *</Label>
+                  <Select
+                    value={formData.saillieId}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, saillieId: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sélectionner une saillie" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {confirmedSaillies.map(saillie => {
+                        const truie = truies.find(t => t.id === saillie.truieId);
+                        return (
+                          <SelectItem key={saillie.id} value={saillie.id}>
+                            {truie?.identification} - {format(new Date(saillie.date), "d MMM yyyy", { locale: fr })}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="date">Date de mise bas *</Label>
+                  <Input
+                    id="date"
+                    type="date"
+                    value={formData.date}
+                    onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="nesVivants">Nés vivants *</Label>
+                    <Input
+                      id="nesVivants"
+                      type="number"
+                      placeholder="12"
+                      value={formData.nesVivants}
+                      onChange={(e) => setFormData(prev => ({ ...prev, nesVivants: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mortNes">Mort-nés</Label>
+                    <Input
+                      id="mortNes"
+                      type="number"
+                      placeholder="0"
+                      value={formData.mortNes}
+                      onChange={(e) => setFormData(prev => ({ ...prev, mortNes: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="poidsMoyen">Poids moyen (kg)</Label>
+                  <Input
+                    id="poidsMoyen"
+                    type="number"
+                    step="0.1"
+                    placeholder="1.4"
+                    value={formData.poidsMoyen}
+                    onChange={(e) => setFormData(prev => ({ ...prev, poidsMoyen: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Notes</Label>
+                  <Input
+                    id="notes"
+                    placeholder="Notes sur la mise bas..."
+                    value={formData.notes}
+                    onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                  />
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} className="flex-1">
+                    Annuler
+                  </Button>
+                  <Button type="submit" variant="success" className="flex-1">
+                    Enregistrer
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        {/* Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {portees.length === 0 ? (
+            <div className="col-span-full text-center py-16 bg-card rounded-2xl border border-border">
+              <Baby className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
+              <p className="text-muted-foreground">Aucune portée enregistrée</p>
+            </div>
+          ) : (
+            portees.map((portee, index) => {
+              const miseBas = misesBas.find(m => m.id === portee.miseBasId);
+              const truie = truies.find(t => t.id === portee.truieId);
+              
+              return (
+                <div
+                  key={portee.id}
+                  className="bg-card rounded-2xl border border-border p-6 shadow-card hover:shadow-card-hover transition-all duration-300 animate-slide-up"
+                  style={{ animationDelay: `${index * 0.1}s` }}
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-xl bg-info/10 flex items-center justify-center">
+                        <Baby className="h-6 w-6 text-info" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-foreground">{truie?.identification}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {miseBas ? format(new Date(miseBas.date), "d MMM yyyy", { locale: fr }) : '-'}
+                        </p>
+                      </div>
+                    </div>
+                    <span className={cn(
+                      "px-3 py-1 rounded-full text-xs font-medium border",
+                      statusColors[portee.statut]
+                    )}>
+                      {statusLabels[portee.statut]}
+                    </span>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="p-3 rounded-xl bg-muted/50 text-center">
+                      <p className="text-2xl font-bold text-foreground">{portee.nombreActuel}</p>
+                      <p className="text-xs text-muted-foreground">Porcelets</p>
+                    </div>
+                    {miseBas && (
+                      <div className="p-3 rounded-xl bg-muted/50 text-center">
+                        <p className="text-2xl font-bold text-foreground">{miseBas.poidsMoyen}</p>
+                        <p className="text-xs text-muted-foreground">Poids moy. (kg)</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {miseBas && (
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Nés vivants</span>
+                        <span className="font-medium text-success">{miseBas.nesVivants}</span>
+                      </div>
+                      {miseBas.mortNes > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Mort-nés</span>
+                          <span className="font-medium text-destructive">{miseBas.mortNes}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {portee.dateSevrage && (
+                    <div className="mt-4 pt-4 border-t border-border">
+                      <div className="flex items-center gap-2 text-success mb-1">
+                        <Scale className="h-4 w-4" />
+                        <span className="text-sm font-medium">Sevrage</span>
+                      </div>
+                      <p className="font-medium text-foreground">
+                        {format(new Date(portee.dateSevrage), "d MMMM yyyy", { locale: fr })}
+                        {portee.poidsSevrage && ` - ${portee.poidsSevrage} kg`}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </MainLayout>
+  );
+};
+
+export default Portees;
