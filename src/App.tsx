@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -13,6 +14,7 @@ import Portees from "./pages/Portees";
 import Ventes from "./pages/Ventes";
 import Depenses from "./pages/Depenses";
 import Alertes from "./pages/Alertes";
+import Engraissement from "./pages/Engraissement";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +38,7 @@ const AppRoutes = () => {
       <Route path="/truies" element={<ProtectedRoute><Truies /></ProtectedRoute>} />
       <Route path="/saillies" element={<ProtectedRoute><Saillies /></ProtectedRoute>} />
       <Route path="/portees" element={<ProtectedRoute><Portees /></ProtectedRoute>} />
+      <Route path="/engraissement" element={<ProtectedRoute><Engraissement /></ProtectedRoute>} />
       <Route path="/ventes" element={<ProtectedRoute><Ventes /></ProtectedRoute>} />
       <Route path="/depenses" element={<ProtectedRoute><Depenses /></ProtectedRoute>} />
       <Route path="/alertes" element={<ProtectedRoute><Alertes /></ProtectedRoute>} />
@@ -46,15 +49,17 @@ const AppRoutes = () => {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </TooltipProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </TooltipProvider>
+      </AuthProvider>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 
