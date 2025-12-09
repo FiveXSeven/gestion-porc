@@ -84,3 +84,27 @@ export interface Alert {
   read: boolean;
   relatedId?: string;
 }
+
+export interface LotEngraissement {
+  id: string;
+  identification: string;
+  dateCreation: string;
+  origine: 'sevrage' | 'achat';
+  porteeId?: string;
+  nombreInitial: number;
+  nombreActuel: number;
+  poidsEntree: number;
+  dateEntree: string;
+  poidsCible: number;
+  statut: 'en_cours' | 'vendu' | 'partiel';
+  notes: string;
+}
+
+export interface Pesee {
+  id: string;
+  lotId: string;
+  date: string;
+  poidsMoyen: number;
+  nombrePeses: number;
+  notes: string;
+}
