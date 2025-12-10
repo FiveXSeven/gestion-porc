@@ -56,7 +56,7 @@ export const RevenueChart = ({ ventes, depenses }: RevenueChartProps) => {
           <YAxis 
             tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
             axisLine={{ stroke: 'hsl(var(--border))' }}
-            tickFormatter={(value) => `${value}€`}
+            tickFormatter={(value) => `${value} FCFA`}
           />
           <Tooltip
             contentStyle={{
@@ -66,7 +66,7 @@ export const RevenueChart = ({ ventes, depenses }: RevenueChartProps) => {
               boxShadow: 'var(--shadow-lg)',
             }}
             labelStyle={{ color: 'hsl(var(--foreground))' }}
-            formatter={(value: number) => [`${value.toLocaleString()} €`]}
+            formatter={(value: number) => [`${value.toLocaleString()} FCFA`]}
           />
           <Area
             type="monotone"

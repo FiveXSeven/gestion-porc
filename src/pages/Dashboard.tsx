@@ -86,7 +86,7 @@ const Dashboard = () => {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 lg:gap-6">
           <StatCard
             title="Truies actives"
             value={truiesActives}
@@ -117,8 +117,8 @@ const Dashboard = () => {
           />
           <StatCard
             title="Bénéfice"
-            value={`${benefice.toLocaleString()} €`}
-            subtitle={`Recettes: ${totalRecettes.toLocaleString()} €`}
+            value={`${benefice.toLocaleString()} FCFA`}
+            subtitle={`Recettes: ${totalRecettes.toLocaleString()} FCFA`}
             icon={benefice >= 0 ? TrendingUp : TrendingDown}
             variant={benefice >= 0 ? 'success' : 'warning'}
           />

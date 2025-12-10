@@ -159,7 +159,7 @@ const Ventes = () => {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="prixUnitaire">Prix unitaire (€) *</Label>
+                  <Label htmlFor="prixUnitaire">Prix unitaire (FCFA) *</Label>
                   <Input
                     id="prixUnitaire"
                     type="number"
@@ -173,7 +173,7 @@ const Ventes = () => {
                   <div className="p-4 rounded-xl bg-success/10 border border-success/20">
                     <p className="text-sm text-success font-medium">Total de la vente</p>
                     <p className="text-2xl font-bold text-foreground">
-                      {(parseInt(formData.quantite) * parseFloat(formData.prixUnitaire)).toLocaleString()} €
+                      {(parseInt(formData.quantite) * parseFloat(formData.prixUnitaire)).toLocaleString()} FCFA
                     </p>
                   </div>
                 )}
@@ -215,7 +215,7 @@ const Ventes = () => {
               <TrendingUp className="h-6 w-6 text-success" />
               <span className="text-sm font-medium text-muted-foreground">Total des recettes</span>
             </div>
-            <p className="text-3xl font-display font-bold text-foreground">{totalRecettes.toLocaleString()} €</p>
+            <p className="text-3xl font-display font-bold text-foreground">{totalRecettes.toLocaleString()} FCFA</p>
           </div>
           <div className="bg-info/10 rounded-2xl border border-info/20 p-6">
             <div className="flex items-center gap-3 mb-2">
@@ -260,8 +260,8 @@ const Ventes = () => {
                       </td>
                       <td className="py-4 px-6 text-foreground">{typeLabels[vente.typeAnimal]}</td>
                       <td className="py-4 px-6 text-foreground font-medium">{vente.quantite}</td>
-                      <td className="py-4 px-6 text-foreground">{vente.prixUnitaire} €</td>
-                      <td className="py-4 px-6 font-semibold text-success">{vente.prixTotal.toLocaleString()} €</td>
+                      <td className="py-4 px-6 text-foreground">{vente.prixUnitaire} FCFA</td>
+                      <td className="py-4 px-6 font-semibold text-success">{vente.prixTotal.toLocaleString()} FCFA</td>
                       <td className="py-4 px-6 text-muted-foreground">{vente.acheteur || '-'}</td>
                     </tr>
                   ))

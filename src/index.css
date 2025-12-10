@@ -104,6 +104,10 @@
     --sidebar-border: 150 25% 15%;
     --sidebar-ring: 28 80% 55%;
   }
+
+  .dark input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
 }
 
 @layer base {

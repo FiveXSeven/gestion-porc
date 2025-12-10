@@ -159,7 +159,7 @@ const Depenses = () => {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="montant">Montant (€) *</Label>
+                  <Label htmlFor="montant">Montant (FCFA) *</Label>
                   <Input
                     id="montant"
                     type="number"
@@ -207,7 +207,7 @@ const Depenses = () => {
               <TrendingDown className="h-6 w-6 text-destructive" />
               <span className="text-sm font-medium text-muted-foreground">Total des dépenses</span>
             </div>
-            <p className="text-4xl font-display font-bold text-foreground">{totalDepenses.toLocaleString()} €</p>
+            <p className="text-4xl font-display font-bold text-foreground">{totalDepenses.toLocaleString()} FCFA</p>
           </div>
           
           {depensesByCategory.length > 0 && (
@@ -231,7 +231,7 @@ const Depenses = () => {
                       ))}
                     </Pie>
                     <Tooltip
-                      formatter={(value: number) => [`${value.toLocaleString()} €`]}
+                      formatter={(value: number) => [`${value.toLocaleString()} FCFA`]}
                       contentStyle={{
                         backgroundColor: 'hsl(var(--card))',
                         border: '1px solid hsl(var(--border))',
@@ -290,7 +290,7 @@ const Depenses = () => {
                         </td>
                         <td className="py-4 px-6 text-muted-foreground">{depense.fournisseur || '-'}</td>
                         <td className="py-4 px-6 text-right font-semibold text-destructive">
-                          -{depense.montant.toLocaleString()} €
+                          -{depense.montant.toLocaleString()} FCFA
                         </td>
                       </tr>
                     );
