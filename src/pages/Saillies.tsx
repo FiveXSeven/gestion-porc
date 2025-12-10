@@ -124,7 +124,7 @@ const Saillies = () => {
   const filteredSaillies = saillies.filter(saillie => {
     const truie = truies.find(t => t.id === saillie.truieId);
     const textMatch = 
-      truie?.identification.toLowerCase().includes(search.toLowerCase()) ||
+      (truie?.identification || '').toLowerCase().includes(search.toLowerCase()) ||
       saillie.employe?.toLowerCase().includes(search.toLowerCase());
     return textMatch;
   });
