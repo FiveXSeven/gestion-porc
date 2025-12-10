@@ -3,11 +3,11 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { AlertsList } from '@/components/dashboard/AlertsList';
 import { RevenueChart } from '@/components/dashboard/RevenueChart';
-import { getTruies, getSaillies, getPortees, getVentes, getDepenses, getAlerts, markAlertRead } from '@/lib/storage';
-import { Truie, Saillie, Portee, Vente, Depense, Alert } from '@/types';
-import { PiggyBank, Heart, Baby, TrendingUp, TrendingDown, AlertCircle, CalendarDays } from 'lucide-react';
+import { getTruies, getSaillies, getPortees, getVentes, getDepenses, getAlerts, markAlertRead, getLots, getPeseesForLot } from '@/lib/storage';
+import { Truie, Saillie, Portee, Vente, Depense, Alert, LotEngraissement } from '@/types';
+import { PiggyBank, Heart, Baby, TrendingUp, TrendingDown, CalendarDays, Scale } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { format } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 const Dashboard = () => {
@@ -18,6 +18,7 @@ const Dashboard = () => {
   const [ventes, setVentes] = useState<Vente[]>([]);
   const [depenses, setDepenses] = useState<Depense[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [lots, setLots] = useState<LotEngraissement[]>([]);
 
   useEffect(() => {
     loadData();
@@ -30,6 +31,7 @@ const Dashboard = () => {
     setVentes(getVentes());
     setDepenses(getDepenses());
     setAlerts(getAlerts());
+    setLots(getLots());
   };
 
   const handleMarkAlertRead = (id: string) => {
@@ -45,6 +47,25 @@ const Dashboard = () => {
   const totalRecettes = ventes.reduce((sum, v) => sum + v.prixTotal, 0);
   const totalDepenses = depenses.reduce((sum, d) => sum + d.montant, 0);
   const benefice = totalRecettes - totalDepenses;
+
+  // Engraissement stats
+  const lotsEnCours = lots.filter(l => l.statut === 'en_cours');
+  const totalAnimauxEngraissement = lotsEnCours.reduce((sum, l) => sum + l.nombreActuel, 0);
+  
+  // Calcul du GMQ moyen
+  const calculateGMQ = (lot: LotEngraissement): number => {
+    const pesees = getPeseesForLot(lot.id);
+    if (pesees.length < 2) return 0;
+    const firstPesee = pesees[0];
+    const lastPesee = pesees[pesees.length - 1];
+    const days = differenceInDays(new Date(lastPesee.date), new Date(firstPesee.date));
+    if (days === 0) return 0;
+    return (lastPesee.poidsMoyen - firstPesee.poidsMoyen) / days;
+  };
+
+  const gmqMoyen = lotsEnCours.length > 0 
+    ? lotsEnCours.reduce((sum, lot) => sum + calculateGMQ(lot), 0) / lotsEnCours.length
+    : 0;
 
   const prochainsMisesBas = saillies
     .filter(s => s.statut === 'confirmee')
@@ -65,7 +86,7 @@ const Dashboard = () => {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-6">
           <StatCard
             title="Truies actives"
             value={truiesActives}
@@ -86,6 +107,13 @@ const Dashboard = () => {
             subtitle="En allaitement"
             icon={Baby}
             variant="success"
+          />
+          <StatCard
+            title="En engraissement"
+            value={totalAnimauxEngraissement}
+            subtitle={`GMQ: ${gmqMoyen.toFixed(0)}g/j`}
+            icon={Scale}
+            variant="warning"
           />
           <StatCard
             title="Bénéfice"

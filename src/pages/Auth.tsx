@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { LoginForm } from '@/components/auth/LoginForm';
 import { RegisterForm } from '@/components/auth/RegisterForm';
 import { Warehouse } from 'lucide-react';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -14,7 +15,12 @@ const Auth = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-hero flex">
+    <div className="min-h-screen bg-background flex">
+      {/* Theme toggle */}
+      <div className="fixed top-4 right-4 z-50">
+        <ThemeToggle />
+      </div>
+
       {/* Left side - Branding */}
       <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 bg-sidebar relative overflow-hidden">
         {/* Decorative elements */}
