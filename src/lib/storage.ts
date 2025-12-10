@@ -1,4 +1,4 @@
-import { User, Truie, Verrat, Saillie, MiseBas, Portee, Vente, Depense, Alert } from '@/types';
+import { User, Truie, Verrat, Saillie, MiseBas, Portee, Vente, Depense, Alert, LotEngraissement, Pesee } from '@/types';
 
 const STORAGE_KEYS = {
   USER: 'porcherie_user',
@@ -11,6 +11,8 @@ const STORAGE_KEYS = {
   DEPENSES: 'porcherie_depenses',
   ALERTS: 'porcherie_alerts',
   IS_AUTHENTICATED: 'porcherie_authenticated',
+  LOTS_ENGRAISSEMENT: 'porcherie_lots_engraissement',
+  PESEES: 'porcherie_pesees',
 };
 
 // User management
@@ -153,6 +155,41 @@ export const markAlertRead = (id: string): void => {
   }
 };
 
+// Lots d'engraissement
+export const getLots = (): LotEngraissement[] => getItems<LotEngraissement>(STORAGE_KEYS.LOTS_ENGRAISSEMENT);
+export const saveLots = (items: LotEngraissement[]): void => saveItems(STORAGE_KEYS.LOTS_ENGRAISSEMENT, items);
+export const addLot = (item: LotEngraissement): void => {
+  const items = getLots();
+  items.push(item);
+  saveLots(items);
+};
+export const updateLot = (id: string, updates: Partial<LotEngraissement>): void => {
+  const items = getLots();
+  const index = items.findIndex(i => i.id === id);
+  if (index !== -1) {
+    items[index] = { ...items[index], ...updates };
+    saveLots(items);
+  }
+};
+export const deleteLot = (id: string): void => {
+  const items = getLots().filter(i => i.id !== id);
+  saveLots(items);
+};
+
+// Pesées
+export const getPesees = (): Pesee[] => getItems<Pesee>(STORAGE_KEYS.PESEES);
+export const savePesees = (items: Pesee[]): void => saveItems(STORAGE_KEYS.PESEES, items);
+export const addPesee = (item: Pesee): void => {
+  const items = getPesees();
+  items.push(item);
+  savePesees(items);
+};
+export const getPeseesForLot = (lotId: string): Pesee[] => {
+  return getPesees().filter(p => p.lotId === lotId).sort((a, b) => 
+    new Date(a.date).getTime() - new Date(b.date).getTime()
+  );
+};
+
 // Initialize demo data
 export const initializeDemoData = (): void => {
   if (getTruies().length === 0) {
@@ -224,5 +261,73 @@ export const initializeDemoData = (): void => {
       { id: '3', type: 'sevrage', message: 'Portée de TR-003 à sevrer dans 20 jours', date: '2024-12-08', read: false, relatedId: '3' },
     ];
     saveAlerts(demoAlerts);
+  }
+
+  // Demo data for lots d'engraissement
+  if (getLots().length === 0) {
+    const demoLots: LotEngraissement[] = [
+      { 
+        id: '1', 
+        identification: 'LOT-2024-001', 
+        dateCreation: '2024-09-15',
+        origine: 'sevrage',
+        nombreInitial: 25,
+        nombreActuel: 24,
+        poidsEntree: 28,
+        dateEntree: '2024-09-15',
+        poidsCible: 115,
+        statut: 'en_cours',
+        notes: 'Lot issu du sevrage de TR-002'
+      },
+      { 
+        id: '2', 
+        identification: 'LOT-2024-002', 
+        dateCreation: '2024-10-20',
+        origine: 'achat',
+        nombreInitial: 30,
+        nombreActuel: 30,
+        poidsEntree: 32,
+        dateEntree: '2024-10-20',
+        poidsCible: 115,
+        statut: 'en_cours',
+        notes: 'Achat ferme voisine'
+      },
+      { 
+        id: '3', 
+        identification: 'LOT-2024-003', 
+        dateCreation: '2024-11-10',
+        origine: 'sevrage',
+        nombreInitial: 20,
+        nombreActuel: 20,
+        poidsEntree: 25,
+        dateEntree: '2024-11-10',
+        poidsCible: 115,
+        statut: 'en_cours',
+        notes: ''
+      },
+    ];
+    saveLots(demoLots);
+  }
+
+  if (getPesees().length === 0) {
+    const demoPesees: Pesee[] = [
+      // Lot 1 - plusieurs pesées
+      { id: '1', lotId: '1', date: '2024-09-15', poidsMoyen: 28, nombrePeses: 25, notes: 'Pesée entrée' },
+      { id: '2', lotId: '1', date: '2024-10-01', poidsMoyen: 42, nombrePeses: 24, notes: '' },
+      { id: '3', lotId: '1', date: '2024-10-15', poidsMoyen: 55, nombrePeses: 24, notes: '' },
+      { id: '4', lotId: '1', date: '2024-11-01', poidsMoyen: 72, nombrePeses: 24, notes: '' },
+      { id: '5', lotId: '1', date: '2024-11-15', poidsMoyen: 85, nombrePeses: 24, notes: '' },
+      { id: '6', lotId: '1', date: '2024-12-01', poidsMoyen: 98, nombrePeses: 24, notes: 'Bonne progression' },
+      // Lot 2
+      { id: '7', lotId: '2', date: '2024-10-20', poidsMoyen: 32, nombrePeses: 30, notes: 'Pesée entrée' },
+      { id: '8', lotId: '2', date: '2024-11-05', poidsMoyen: 48, nombrePeses: 30, notes: '' },
+      { id: '9', lotId: '2', date: '2024-11-20', poidsMoyen: 62, nombrePeses: 30, notes: '' },
+      { id: '10', lotId: '2', date: '2024-12-05', poidsMoyen: 78, nombrePeses: 30, notes: '' },
+      // Lot 3
+      { id: '11', lotId: '3', date: '2024-11-10', poidsMoyen: 25, nombrePeses: 20, notes: 'Pesée entrée' },
+      { id: '12', lotId: '3', date: '2024-11-25', poidsMoyen: 38, nombrePeses: 20, notes: '' },
+      { id: '13', lotId: '3', date: '2024-12-10', poidsMoyen: 52, nombrePeses: 20, notes: '' },
+    ];
+    savePesees(demoPesees);
   }
 };

@@ -12,16 +12,19 @@ import {
   LogOut,
   Menu,
   X,
-  Warehouse
+  Warehouse,
+  Scale
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Tableau de bord' },
   { to: '/truies', icon: PiggyBank, label: 'Truies' },
   { to: '/saillies', icon: Heart, label: 'Saillies' },
   { to: '/portees', icon: Baby, label: 'Portées' },
+  { to: '/engraissement', icon: Scale, label: 'Engraissement' },
   { to: '/ventes', icon: ShoppingCart, label: 'Ventes' },
   { to: '/depenses', icon: Receipt, label: 'Dépenses' },
   { to: '/alertes', icon: Bell, label: 'Alertes' },
@@ -104,14 +107,17 @@ export const Sidebar = () => {
               <p className="text-xs text-sidebar-foreground/60 truncate">{user?.email}</p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            onClick={logout}
-            className="w-full mt-3 justify-start text-sidebar-foreground/70 hover:text-destructive hover:bg-destructive/10"
-          >
-            <LogOut className="h-5 w-5 mr-3" />
-            Déconnexion
-          </Button>
+          <div className="flex items-center gap-2 mt-3">
+            <Button
+              variant="ghost"
+              onClick={logout}
+              className="flex-1 justify-start text-sidebar-foreground/70 hover:text-destructive hover:bg-destructive/10"
+            >
+              <LogOut className="h-5 w-5 mr-3" />
+              Déconnexion
+            </Button>
+            <ThemeToggle />
+          </div>
         </div>
       </aside>
     </>
