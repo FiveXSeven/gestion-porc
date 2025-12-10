@@ -6,6 +6,12 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { getPortees, getMisesBas, getTruies, addMiseBas, addPortee, getSaillies, updateTruie, updateSaillie, updatePortee, deletePortee, updateMiseBas, deleteMiseBas } from '@/lib/storage';
+import { Portee, MiseBas, Truie, Saillie } from '@/types';
+import { Plus, Baby, Scale, Search, Edit2, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { format } from 'date-fns';
+import { fr } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
 const statusLabels: Record<Portee['statut'], string> = {
   allaitement: 'En allaitement',
