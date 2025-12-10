@@ -7,11 +7,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { getSaillies, addSaillie, getTruies, getVerrats, updateTruie } from '@/lib/storage';
 import { Saillie, Truie, Verrat } from '@/types';
-import { Plus, Heart, Calendar } from 'lucide-react';
+import { Plus, Heart, Calendar, Search, Edit2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, addDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+
 
 const statusLabels: Record<Saillie['statut'], string> = {
   en_attente: 'En attente',
@@ -37,6 +38,8 @@ const Saillies = () => {
     methode: 'naturelle' as Saillie['methode'],
     employe: '',
   });
+  const [search, setSearch] = useState('');
+  const [editingSaillie, setEditingSaillie] = useState<Saillie | null>(null);
 
   useEffect(() => {
     loadData();
@@ -56,7 +59,9 @@ const Saillies = () => {
       methode: 'naturelle',
       employe: '',
     });
+    setEditingSaillie(null);
   };
+
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,23 +75,59 @@ const Saillies = () => {
     const saillieDate = new Date(formData.date);
     const datePrevueMiseBas = format(addDays(saillieDate, 114), 'yyyy-MM-dd');
 
-    const newSaillie: Saillie = {
-      id: Date.now().toString(),
-      ...formData,
-      datePrevueMiseBas,
-      statut: 'en_attente',
-    };
+    if (editingSaillie) {
+      updateSaillie(editingSaillie.id, {
+        ...formData,
+        datePrevueMiseBas,
+      });
+      toast.success('Saillie modifiée avec succès');
+    } else {
+      const newSaillie: Saillie = {
+        id: Date.now().toString(),
+        ...formData,
+        datePrevueMiseBas,
+        statut: 'en_attente',
+      };
+      
+      addSaillie(newSaillie);
+      
+      // Update truie status
+      updateTruie(formData.truieId, { statut: 'gestante' });
+      toast.success('Saillie enregistrée avec succès');
+    }
     
-    addSaillie(newSaillie);
-    
-    // Update truie status
-    updateTruie(formData.truieId, { statut: 'gestante' });
-    
-    toast.success('Saillie enregistrée avec succès');
     loadData();
     setIsDialogOpen(false);
     resetForm();
   };
+
+  const handleEdit = (saillie: Saillie) => {
+    setEditingSaillie(saillie);
+    setFormData({
+      truieId: saillie.truieId,
+      verratId: saillie.verratId,
+      date: saillie.date,
+      methode: saillie.methode,
+      employe: saillie.employe,
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleDelete = (id: string) => {
+    if (confirm('Êtes-vous sûr de vouloir supprimer cette saillie ?')) {
+      deleteSaillie(id);
+      loadData();
+      toast.success('Saillie supprimée');
+    }
+  };
+
+  const filteredSaillies = saillies.filter(saillie => {
+    const truie = truies.find(t => t.id === saillie.truieId);
+    const textMatch = 
+      truie?.identification.toLowerCase().includes(search.toLowerCase()) ||
+      saillie.employe?.toLowerCase().includes(search.toLowerCase());
+    return textMatch;
+  });
 
   const availableTruies = truies.filter(t => t.statut === 'active');
   const activeVerrats = verrats.filter(v => v.statut === 'actif');
@@ -112,7 +153,9 @@ const Saillies = () => {
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle className="font-display">Nouvelle saillie</DialogTitle>
+                <DialogTitle className="font-display">
+                  {editingSaillie ? 'Modifier la saillie' : 'Nouvelle saillie'}
+                </DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                 <div className="space-y-2">
@@ -202,7 +245,7 @@ const Saillies = () => {
                     Annuler
                   </Button>
                   <Button type="submit" variant="accent" className="flex-1">
-                    Enregistrer
+                    {editingSaillie ? 'Modifier' : 'Enregistrer'}
                   </Button>
                 </div>
               </form>
@@ -210,15 +253,26 @@ const Saillies = () => {
           </Dialog>
         </div>
 
+        {/* Search */}
+        <div className="relative animate-slide-up">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+          <Input
+            placeholder="Rechercher par truie ou employé..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-11"
+          />
+        </div>
+
         {/* Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {saillies.length === 0 ? (
+          {filteredSaillies.length === 0 ? (
             <div className="col-span-full text-center py-16 bg-card rounded-2xl border border-border">
               <Heart className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
               <p className="text-muted-foreground">Aucune saillie enregistrée</p>
             </div>
           ) : (
-            saillies.map((saillie, index) => {
+            filteredSaillies.map((saillie, index) => {
               const truie = truies.find(t => t.id === saillie.truieId);
               const verrat = verrats.find(v => v.id === saillie.verratId);
               
@@ -244,6 +298,24 @@ const Saillies = () => {
                     )}>
                       {statusLabels[saillie.statut]}
                     </span>
+                    <div className="flex gap-1 ml-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEdit(saillie)}
+                        className="h-8 w-8 text-muted-foreground hover:text-primary"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(saillie.id)}
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                   
                   <div className="space-y-3">

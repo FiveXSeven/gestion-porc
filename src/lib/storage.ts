@@ -93,6 +93,10 @@ export const updateSaillie = (id: string, updates: Partial<Saillie>): void => {
     saveSaillies(items);
   }
 };
+export const deleteSaillie = (id: string): void => {
+  const items = getSaillies().filter(i => i.id !== id);
+  saveSaillies(items);
+};
 
 // Mises bas
 export const getMisesBas = (): MiseBas[] => getItems<MiseBas>(STORAGE_KEYS.MISES_BAS);
@@ -100,6 +104,18 @@ export const saveMisesBas = (items: MiseBas[]): void => saveItems(STORAGE_KEYS.M
 export const addMiseBas = (item: MiseBas): void => {
   const items = getMisesBas();
   items.push(item);
+  saveMisesBas(items);
+};
+export const updateMiseBas = (id: string, updates: Partial<MiseBas>): void => {
+  const items = getMisesBas();
+  const index = items.findIndex(i => i.id === id);
+  if (index !== -1) {
+    items[index] = { ...items[index], ...updates };
+    saveMisesBas(items);
+  }
+};
+export const deleteMiseBas = (id: string): void => {
+  const items = getMisesBas().filter(i => i.id !== id);
   saveMisesBas(items);
 };
 
@@ -119,6 +135,10 @@ export const updatePortee = (id: string, updates: Partial<Portee>): void => {
     savePortees(items);
   }
 };
+export const deletePortee = (id: string): void => {
+  const items = getPortees().filter(i => i.id !== id);
+  savePortees(items);
+};
 
 // Ventes
 export const getVentes = (): Vente[] => getItems<Vente>(STORAGE_KEYS.VENTES);
@@ -128,6 +148,18 @@ export const addVente = (item: Vente): void => {
   items.push(item);
   saveVentes(items);
 };
+export const updateVente = (id: string, updates: Partial<Vente>): void => {
+  const items = getVentes();
+  const index = items.findIndex(i => i.id === id);
+  if (index !== -1) {
+    items[index] = { ...items[index], ...updates };
+    saveVentes(items);
+  }
+};
+export const deleteVente = (id: string): void => {
+  const items = getVentes().filter(i => i.id !== id);
+  saveVentes(items);
+};
 
 // Dépenses
 export const getDepenses = (): Depense[] => getItems<Depense>(STORAGE_KEYS.DEPENSES);
@@ -135,6 +167,18 @@ export const saveDepenses = (items: Depense[]): void => saveItems(STORAGE_KEYS.D
 export const addDepense = (item: Depense): void => {
   const items = getDepenses();
   items.push(item);
+  saveDepenses(items);
+};
+export const updateDepense = (id: string, updates: Partial<Depense>): void => {
+  const items = getDepenses();
+  const index = items.findIndex(i => i.id === id);
+  if (index !== -1) {
+    items[index] = { ...items[index], ...updates };
+    saveDepenses(items);
+  }
+};
+export const deleteDepense = (id: string): void => {
+  const items = getDepenses().filter(i => i.id !== id);
   saveDepenses(items);
 };
 

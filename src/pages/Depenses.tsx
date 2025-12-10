@@ -7,11 +7,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { getDepenses, addDepense } from '@/lib/storage';
 import { Depense } from '@/types';
-import { Plus, Receipt, TrendingDown, Wheat, Stethoscope, Wrench, Users, Building, MoreHorizontal } from 'lucide-react';
+import { Plus, Receipt, TrendingDown, Wheat, Stethoscope, Wrench, Users, Building, MoreHorizontal, Search, Edit2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { updateDepense, deleteDepense } from '@/lib/storage';
 
 const categorieLabels: Record<Depense['categorie'], string> = {
   alimentation: 'Alimentation',
@@ -50,6 +51,8 @@ const Depenses = () => {
     description: '',
     fournisseur: '',
   });
+  const [search, setSearch] = useState('');
+  const [editingDepense, setEditingDepense] = useState<Depense | null>(null);
 
   useEffect(() => {
     loadDepenses();
@@ -67,6 +70,7 @@ const Depenses = () => {
       description: '',
       fournisseur: '',
     });
+    setEditingDepense(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -77,21 +81,57 @@ const Depenses = () => {
       return;
     }
 
-    const newDepense: Depense = {
-      id: Date.now().toString(),
+    const newDepenseData = {
       date: formData.date,
       categorie: formData.categorie,
       montant: parseFloat(formData.montant),
       description: formData.description,
       fournisseur: formData.fournisseur,
     };
-    
-    addDepense(newDepense);
-    toast.success('Dépense enregistrée avec succès');
+
+    if (editingDepense) {
+      updateDepense(editingDepense.id, newDepenseData);
+      toast.success('Dépense modifiée avec succès');
+    } else {
+      const newDepense: Depense = {
+        id: Date.now().toString(),
+        ...newDepenseData,
+      };
+      
+      addDepense(newDepense);
+      toast.success('Dépense enregistrée avec succès');
+    }
+
     loadDepenses();
     setIsDialogOpen(false);
     resetForm();
   };
+
+  const handleEdit = (depense: Depense) => {
+    setEditingDepense(depense);
+    setFormData({
+      date: depense.date,
+      categorie: depense.categorie,
+      montant: depense.montant.toString(),
+      description: depense.description,
+      fournisseur: depense.fournisseur || '',
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleDelete = (id: string) => {
+    if (confirm('Êtes-vous sûr de vouloir supprimer cette dépense ?')) {
+      deleteDepense(id);
+      loadDepenses();
+      toast.success('Dépense supprimée');
+    }
+  };
+
+  const filteredDepenses = depenses.filter(depense => 
+    (depense.description.toLowerCase().includes(search.toLowerCase())) ||
+    (depense.fournisseur?.toLowerCase() || '').includes(search.toLowerCase()) ||
+    categorieLabels[depense.categorie].toLowerCase().includes(search.toLowerCase())
+  );
 
   const totalDepenses = depenses.reduce((sum, d) => sum + d.montant, 0);
 
@@ -128,7 +168,9 @@ const Depenses = () => {
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle className="font-display">Enregistrer une dépense</DialogTitle>
+                <DialogTitle className="font-display">
+                  {editingDepense ? 'Modifier la dépense' : 'Enregistrer une dépense'}
+                </DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -192,7 +234,7 @@ const Depenses = () => {
                     Annuler
                   </Button>
                   <Button type="submit" variant="destructive" className="flex-1">
-                    Enregistrer
+                    {editingDepense ? 'Modifier' : 'Enregistrer'}
                   </Button>
                 </div>
               </form>
@@ -246,6 +288,17 @@ const Depenses = () => {
           )}
         </div>
 
+        {/* Search */}
+        <div className="relative animate-slide-up">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+          <Input
+            placeholder="Rechercher par description, fournisseur ou catégorie..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-11"
+          />
+        </div>
+
         {/* Table */}
         <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-card animate-slide-up" style={{ animationDelay: '0.2s' }}>
           <div className="overflow-x-auto">
@@ -257,10 +310,11 @@ const Depenses = () => {
                   <th className="text-left py-4 px-6 text-sm font-semibold text-foreground">Description</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-foreground">Fournisseur</th>
                   <th className="text-right py-4 px-6 text-sm font-semibold text-foreground">Montant</th>
+                  <th className="text-right py-4 px-6 text-sm font-semibold text-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {depenses.length === 0 ? (
+                {filteredDepenses.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="py-12 text-center">
                       <Receipt className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
@@ -268,7 +322,7 @@ const Depenses = () => {
                     </td>
                   </tr>
                 ) : (
-                  depenses.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((depense, index) => {
+                  filteredDepenses.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((depense, index) => {
                     const Icon = categorieIcons[depense.categorie];
                     return (
                       <tr 
@@ -291,6 +345,26 @@ const Depenses = () => {
                         <td className="py-4 px-6 text-muted-foreground">{depense.fournisseur || '-'}</td>
                         <td className="py-4 px-6 text-right font-semibold text-destructive">
                           -{depense.montant.toLocaleString()} FCFA
+                        </td>
+                        <td className="py-4 px-6 text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEdit(depense)}
+                              className="h-8 w-8 text-muted-foreground hover:text-primary"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(depense.id)}
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     );

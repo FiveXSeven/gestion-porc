@@ -7,12 +7,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { getLots, addLot, getPeseesForLot, addPesee, updateLot } from '@/lib/storage';
 import { LotEngraissement, Pesee } from '@/types';
-import { Plus, Scale, TrendingUp, Calendar, Target, Eye } from 'lucide-react';
+import { Plus, Scale, TrendingUp, Calendar, Target, Eye, Search, Edit2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { deleteLot } from '@/lib/storage';
 
 const statusLabels: Record<LotEngraissement['statut'], string> = {
   en_cours: 'En cours',
@@ -32,6 +33,8 @@ const Engraissement = () => {
   const [isPeseeDialogOpen, setIsPeseeDialogOpen] = useState(false);
   const [selectedLotId, setSelectedLotId] = useState<string | null>(null);
   const [detailLot, setDetailLot] = useState<LotEngraissement | null>(null);
+  const [search, setSearch] = useState('');
+  const [editingLot, setEditingLot] = useState<LotEngraissement | null>(null);
   
   const [lotFormData, setLotFormData] = useState({
     identification: '',
@@ -68,6 +71,7 @@ const Engraissement = () => {
       poidsCible: '115',
       notes: '',
     });
+    setEditingLot(null);
   };
 
   const resetPeseeForm = () => {
@@ -90,38 +94,78 @@ const Engraissement = () => {
     const nombreInitial = parseInt(lotFormData.nombreInitial);
     const poidsEntree = parseFloat(lotFormData.poidsEntree);
 
-    const newLot: LotEngraissement = {
-      id: Date.now().toString(),
-      identification: lotFormData.identification,
-      dateCreation: new Date().toISOString().split('T')[0],
-      origine: lotFormData.origine,
-      nombreInitial,
-      nombreActuel: nombreInitial,
-      poidsEntree,
-      dateEntree: lotFormData.dateEntree,
-      poidsCible: parseFloat(lotFormData.poidsCible) || 115,
-      statut: 'en_cours',
-      notes: lotFormData.notes,
-    };
-    
-    addLot(newLot);
+    if (editingLot) {
+      updateLot(editingLot.id, {
+        identification: lotFormData.identification,
+        origine: lotFormData.origine,
+        dateEntree: lotFormData.dateEntree,
+        nombreInitial,
+        poidsEntree,
+        poidsCible: parseFloat(lotFormData.poidsCible) || 115,
+        notes: lotFormData.notes,
+      });
+      toast.success('Lot modifié avec succès');
+    } else {
+      const newLot: LotEngraissement = {
+        id: Date.now().toString(),
+        identification: lotFormData.identification,
+        dateCreation: new Date().toISOString().split('T')[0],
+        origine: lotFormData.origine,
+        nombreInitial,
+        nombreActuel: nombreInitial,
+        poidsEntree,
+        dateEntree: lotFormData.dateEntree,
+        poidsCible: parseFloat(lotFormData.poidsCible) || 115,
+        statut: 'en_cours',
+        notes: lotFormData.notes,
+      };
+      
+      addLot(newLot);
+  
+      // Add initial weighing
+      const initialPesee: Pesee = {
+        id: (Date.now() + 1).toString(),
+        lotId: newLot.id,
+        date: lotFormData.dateEntree,
+        poidsMoyen: poidsEntree,
+        nombrePeses: nombreInitial,
+        notes: 'Pesée d\'entrée',
+      };
+      addPesee(initialPesee);
+  
+      toast.success('Lot créé avec succès');
+    }
 
-    // Add initial weighing
-    const initialPesee: Pesee = {
-      id: (Date.now() + 1).toString(),
-      lotId: newLot.id,
-      date: lotFormData.dateEntree,
-      poidsMoyen: poidsEntree,
-      nombrePeses: nombreInitial,
-      notes: 'Pesée d\'entrée',
-    };
-    addPesee(initialPesee);
-
-    toast.success('Lot créé avec succès');
     loadLots();
     setIsLotDialogOpen(false);
     resetLotForm();
   };
+
+  const handleEdit = (lot: LotEngraissement) => {
+    setEditingLot(lot);
+    setLotFormData({
+      identification: lot.identification,
+      dateEntree: lot.dateEntree,
+      origine: lot.origine,
+      nombreInitial: lot.nombreInitial.toString(),
+      poidsEntree: lot.poidsEntree.toString(),
+      poidsCible: lot.poidsCible.toString(),
+      notes: lot.notes || '',
+    });
+    setIsLotDialogOpen(true);
+  };
+
+  const handleDelete = (id: string) => {
+    if (confirm('Êtes-vous sûr de vouloir supprimer ce lot ?')) {
+      deleteLot(id);
+      loadLots();
+      toast.success('Lot supprimé');
+    }
+  };
+
+  const filteredLots = lots.filter(lot => 
+    lot.identification.toLowerCase().includes(search.toLowerCase())
+  );
 
   const handlePeseeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -229,7 +273,9 @@ const Engraissement = () => {
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle className="font-display">Créer un lot d'engraissement</DialogTitle>
+                <DialogTitle className="font-display">
+                  {editingLot ? 'Modifier le lot' : 'Créer un lot d\'engraissement'}
+                </DialogTitle>
               </DialogHeader>
               <form onSubmit={handleLotSubmit} className="space-y-4 mt-4">
                 <div className="space-y-2">
@@ -314,7 +360,7 @@ const Engraissement = () => {
                     Annuler
                   </Button>
                   <Button type="submit" className="flex-1">
-                    Créer le lot
+                    {editingLot ? 'Modifier' : 'Créer le lot'}
                   </Button>
                 </div>
               </form>
@@ -503,15 +549,26 @@ const Engraissement = () => {
           </DialogContent>
         </Dialog>
 
+        {/* Search */}
+        <div className="relative animate-slide-up">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+          <Input
+            placeholder="Rechercher par identification..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-11"
+          />
+        </div>
+
         {/* Lots Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {lots.length === 0 ? (
+          {filteredLots.length === 0 ? (
             <div className="col-span-full text-center py-16 bg-card rounded-2xl border border-border">
               <Scale className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
               <p className="text-muted-foreground">Aucun lot d'engraissement</p>
             </div>
           ) : (
-            lots.map((lot, index) => {
+            filteredLots.map((lot, index) => {
               const gmq = calculateGMQ(lot);
               const daysToTarget = calculateDaysToTarget(lot);
               const lastWeight = getLastWeight(lot.id);
@@ -541,6 +598,25 @@ const Engraissement = () => {
                     )}>
                       {statusLabels[lot.statut]}
                     </span>
+                  </div>
+                  
+                  <div className="flex gap-1 absolute top-6 right-6">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleEdit(lot)}
+                      className="h-8 w-8 text-muted-foreground hover:text-primary bg-card/80 backdrop-blur-sm"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDelete(lot.id)}
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive bg-card/80 backdrop-blur-sm"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
 
                   {/* Progress bar */}

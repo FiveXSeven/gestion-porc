@@ -7,11 +7,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { getPortees, getMisesBas, getTruies, addMiseBas, addPortee, getSaillies, updateTruie, updateSaillie } from '@/lib/storage';
 import { Portee, MiseBas, Truie, Saillie } from '@/types';
-import { Plus, Baby, Scale } from 'lucide-react';
+import { Plus, Baby, Scale, Search, Edit2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { updatePortee, deletePortee, updateMiseBas, deleteMiseBas } from '@/lib/storage';
 
 const statusLabels: Record<Portee['statut'], string> = {
   allaitement: 'En allaitement',
@@ -39,6 +40,8 @@ const Portees = () => {
     poidsMoyen: '',
     notes: '',
   });
+  const [search, setSearch] = useState('');
+  const [editingPortee, setEditingPortee] = useState<Portee | null>(null);
 
   useEffect(() => {
     loadData();
@@ -60,7 +63,9 @@ const Portees = () => {
       poidsMoyen: '',
       notes: '',
     });
+    setEditingPortee(null);
   };
+
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,44 +78,98 @@ const Portees = () => {
     const saillie = saillies.find(s => s.id === formData.saillieId);
     if (!saillie) return;
 
-    const newMiseBas: MiseBas = {
-      id: Date.now().toString(),
-      saillieId: formData.saillieId,
-      truieId: saillie.truieId,
-      date: formData.date,
-      nesVivants: parseInt(formData.nesVivants),
-      mortNes: parseInt(formData.mortNes) || 0,
-      poidsMoyen: parseFloat(formData.poidsMoyen) || 0,
-      notes: formData.notes,
-    };
-    
-    addMiseBas(newMiseBas);
+    if (editingPortee) {
+      // Update existing
+      const miseBas = misesBas.find(m => m.id === editingPortee.miseBasId);
+      if (miseBas) {
+        updateMiseBas(miseBas.id, {
+          date: formData.date,
+          nesVivants: parseInt(formData.nesVivants),
+          mortNes: parseInt(formData.mortNes) || 0,
+          poidsMoyen: parseFloat(formData.poidsMoyen) || 0,
+          notes: formData.notes,
+        });
+      }
+      
+      updatePortee(editingPortee.id, {
+        nombreActuel: parseInt(formData.nesVivants), // Resetting to new count if corrected
+      });
+      
+      toast.success('Portée modifiée avec succès');
+    } else {
+      // Create new
+      const newMiseBas: MiseBas = {
+        id: Date.now().toString(),
+        saillieId: formData.saillieId,
+        truieId: saillie.truieId,
+        date: formData.date,
+        nesVivants: parseInt(formData.nesVivants),
+        mortNes: parseInt(formData.mortNes) || 0,
+        poidsMoyen: parseFloat(formData.poidsMoyen) || 0,
+        notes: formData.notes,
+      };
+      
+      addMiseBas(newMiseBas);
 
-    const newPortee: Portee = {
-      id: (Date.now() + 1).toString(),
-      miseBasId: newMiseBas.id,
-      truieId: saillie.truieId,
-      nombreActuel: parseInt(formData.nesVivants),
-      dateSevrage: null,
-      poidsSevrage: null,
-      statut: 'allaitement',
-    };
-    
-    addPortee(newPortee);
+      const newPortee: Portee = {
+        id: (Date.now() + 1).toString(),
+        miseBasId: newMiseBas.id,
+        truieId: saillie.truieId,
+        nombreActuel: parseInt(formData.nesVivants),
+        dateSevrage: null,
+        poidsSevrage: null,
+        statut: 'allaitement',
+      };
+      
+      addPortee(newPortee);
 
-    // Update truie and saillie status
-    updateTruie(saillie.truieId, { statut: 'allaitante' });
-    updateSaillie(formData.saillieId, { statut: 'confirmee' });
-    
-    toast.success('Mise bas enregistrée avec succès');
+      // Update truie and saillie status
+      updateTruie(saillie.truieId, { statut: 'allaitante' });
+      updateSaillie(formData.saillieId, { statut: 'confirmee' });
+      
+      toast.success('Mise bas enregistrée avec succès');
+    }
     loadData();
     setIsDialogOpen(false);
     resetForm();
   };
 
   const confirmedSaillies = saillies.filter(s => 
-    s.statut === 'confirmee' && !misesBas.some(m => m.saillieId === s.id)
+    s.statut === 'confirmee' && (!misesBas.some(m => m.saillieId === s.id) || editingPortee)
   );
+
+  const handleEdit = (portee: Portee) => {
+    const miseBas = misesBas.find(m => m.id === portee.miseBasId);
+    if (!miseBas) return;
+
+    setEditingPortee(portee);
+    setFormData({
+      saillieId: miseBas.saillieId,
+      date: miseBas.date,
+      nesVivants: miseBas.nesVivants.toString(),
+      mortNes: miseBas.mortNes.toString(),
+      poidsMoyen: miseBas.poidsMoyen.toString(),
+      notes: miseBas.notes || '',
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleDelete = (id: string) => {
+    if (confirm('Êtes-vous sûr de vouloir supprimer cette portée ?')) {
+      const portee = portees.find(p => p.id === id);
+      if (portee) {
+        deletePortee(id);
+        deleteMiseBas(portee.miseBasId);
+        loadData();
+        toast.success('Portée supprimée');
+      }
+    }
+  };
+
+  const filteredPortees = portees.filter(portee => {
+    const truie = truies.find(t => t.id === portee.truieId);
+    return truie?.identification.toLowerCase().includes(search.toLowerCase());
+  });
 
   return (
     <MainLayout>
@@ -133,7 +192,9 @@ const Portees = () => {
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle className="font-display">Nouvelle mise bas</DialogTitle>
+                <DialogTitle className="font-display">
+                  {editingPortee ? 'Modifier la portée' : 'Nouvelle mise bas'}
+                </DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                 <div className="space-y-2">
@@ -213,7 +274,7 @@ const Portees = () => {
                     Annuler
                   </Button>
                   <Button type="submit" variant="success" className="flex-1">
-                    Enregistrer
+                    {editingPortee ? 'Modifier' : 'Enregistrer'}
                   </Button>
                 </div>
               </form>
@@ -221,15 +282,26 @@ const Portees = () => {
           </Dialog>
         </div>
 
+        {/* Search */}
+        <div className="relative animate-slide-up">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+          <Input
+            placeholder="Rechercher par identification truie..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-11"
+          />
+        </div>
+
         {/* Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {portees.length === 0 ? (
+          {filteredPortees.length === 0 ? (
             <div className="col-span-full text-center py-16 bg-card rounded-2xl border border-border">
               <Baby className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
               <p className="text-muted-foreground">Aucune portée enregistrée</p>
             </div>
           ) : (
-            portees.map((portee, index) => {
+            filteredPortees.map((portee, index) => {
               const miseBas = misesBas.find(m => m.id === portee.miseBasId);
               const truie = truies.find(t => t.id === portee.truieId);
               
@@ -257,6 +329,24 @@ const Portees = () => {
                     )}>
                       {statusLabels[portee.statut]}
                     </span>
+                    <div className="flex gap-1 ml-2">
+                       <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEdit(portee)}
+                        className="h-8 w-8 text-muted-foreground hover:text-primary"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(portee.id)}
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                   
                   <div className="grid grid-cols-2 gap-4 mb-4">

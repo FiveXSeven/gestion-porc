@@ -7,10 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { getVentes, addVente } from '@/lib/storage';
 import { Vente } from '@/types';
-import { Plus, ShoppingCart, TrendingUp } from 'lucide-react';
+import { Plus, ShoppingCart, TrendingUp, Search, Edit2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { updateVente, deleteVente } from '@/lib/storage';
 
 const typeLabels: Record<Vente['typeAnimal'], string> = {
   porcelet: 'Porcelet',
@@ -31,6 +32,8 @@ const Ventes = () => {
     acheteur: '',
     notes: '',
   });
+  const [search, setSearch] = useState('');
+  const [editingVente, setEditingVente] = useState<Vente | null>(null);
 
   useEffect(() => {
     loadVentes();
@@ -50,6 +53,7 @@ const Ventes = () => {
       acheteur: '',
       notes: '',
     });
+    setEditingVente(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -63,24 +67,66 @@ const Ventes = () => {
     const quantite = parseInt(formData.quantite);
     const prixUnitaire = parseFloat(formData.prixUnitaire);
 
-    const newVente: Vente = {
-      id: Date.now().toString(),
-      date: formData.date,
-      typeAnimal: formData.typeAnimal,
-      quantite,
-      poidsTotal: parseFloat(formData.poidsTotal) || 0,
-      prixUnitaire,
-      prixTotal: quantite * prixUnitaire,
-      acheteur: formData.acheteur,
-      notes: formData.notes,
-    };
+    if (editingVente) {
+      updateVente(editingVente.id, {
+        date: formData.date,
+        typeAnimal: formData.typeAnimal,
+        quantite,
+        poidsTotal: parseFloat(formData.poidsTotal) || 0,
+        prixUnitaire,
+        prixTotal: quantite * prixUnitaire,
+        acheteur: formData.acheteur,
+        notes: formData.notes,
+      });
+      toast.success('Vente modifiée avec succès');
+    } else {
+      const newVente: Vente = {
+        id: Date.now().toString(),
+        date: formData.date,
+        typeAnimal: formData.typeAnimal,
+        quantite,
+        poidsTotal: parseFloat(formData.poidsTotal) || 0,
+        prixUnitaire,
+        prixTotal: quantite * prixUnitaire,
+        acheteur: formData.acheteur,
+        notes: formData.notes,
+      };
+      
+      addVente(newVente);
+      toast.success('Vente enregistrée avec succès');
+    }
     
-    addVente(newVente);
-    toast.success('Vente enregistrée avec succès');
     loadVentes();
     setIsDialogOpen(false);
     resetForm();
   };
+
+  const handleEdit = (vente: Vente) => {
+    setEditingVente(vente);
+    setFormData({
+      date: vente.date,
+      typeAnimal: vente.typeAnimal,
+      quantite: vente.quantite.toString(),
+      poidsTotal: vente.poidsTotal.toString(),
+      prixUnitaire: vente.prixUnitaire.toString(),
+      acheteur: vente.acheteur,
+      notes: vente.notes || '',
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleDelete = (id: string) => {
+    if (confirm('Êtes-vous sûr de vouloir supprimer cette vente ?')) {
+      deleteVente(id);
+      loadVentes();
+      toast.success('Vente supprimée');
+    }
+  };
+
+  const filteredVentes = ventes.filter(vente => 
+    (vente.acheteur?.toLowerCase() || '').includes(search.toLowerCase()) ||
+    typeLabels[vente.typeAnimal].toLowerCase().includes(search.toLowerCase())
+  );
 
   const totalRecettes = ventes.reduce((sum, v) => sum + v.prixTotal, 0);
   const totalAnimaux = ventes.reduce((sum, v) => sum + v.quantite, 0);
@@ -106,7 +152,9 @@ const Ventes = () => {
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle className="font-display">Enregistrer une vente</DialogTitle>
+                <DialogTitle className="font-display">
+                  {editingVente ? 'Modifier la vente' : 'Enregistrer une vente'}
+                </DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -200,7 +248,7 @@ const Ventes = () => {
                     Annuler
                   </Button>
                   <Button type="submit" variant="success" className="flex-1">
-                    Enregistrer
+                    {editingVente ? 'Modifier' : 'Enregistrer'}
                   </Button>
                 </div>
               </form>
@@ -226,6 +274,17 @@ const Ventes = () => {
           </div>
         </div>
 
+        {/* Search */}
+        <div className="relative animate-slide-up">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+          <Input
+            placeholder="Rechercher par acheteur ou type..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-11"
+          />
+        </div>
+
         {/* Table */}
         <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-card animate-slide-up" style={{ animationDelay: '0.1s' }}>
           <div className="overflow-x-auto">
@@ -238,10 +297,11 @@ const Ventes = () => {
                   <th className="text-left py-4 px-6 text-sm font-semibold text-foreground">Prix unit.</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-foreground">Total</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-foreground">Acheteur</th>
+                  <th className="text-right py-4 px-6 text-sm font-semibold text-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {ventes.length === 0 ? (
+                {filteredVentes.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-12 text-center">
                       <ShoppingCart className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
@@ -249,7 +309,7 @@ const Ventes = () => {
                     </td>
                   </tr>
                 ) : (
-                  ventes.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((vente, index) => (
+                  filteredVentes.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((vente, index) => (
                     <tr 
                       key={vente.id} 
                       className="hover:bg-muted/30 transition-colors animate-fade-in"
@@ -263,6 +323,26 @@ const Ventes = () => {
                       <td className="py-4 px-6 text-foreground">{vente.prixUnitaire} FCFA</td>
                       <td className="py-4 px-6 font-semibold text-success">{vente.prixTotal.toLocaleString()} FCFA</td>
                       <td className="py-4 px-6 text-muted-foreground">{vente.acheteur || '-'}</td>
+                      <td className="py-4 px-6 text-right">
+                        <div className="flex justify-end gap-2">
+                           <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEdit(vente)}
+                            className="h-8 w-8 text-muted-foreground hover:text-primary"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDelete(vente.id)}
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </td>
                     </tr>
                   ))
                 )}
