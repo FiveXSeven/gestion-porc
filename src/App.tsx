@@ -15,6 +15,7 @@ import Ventes from "./pages/Ventes";
 import Depenses from "./pages/Depenses";
 import Alertes from "./pages/Alertes";
 import Engraissement from "./pages/Engraissement";
+import PostSevrage from "./pages/PostSevrage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +39,7 @@ const AppRoutes = () => {
       <Route path="/truies" element={<ProtectedRoute><Truies /></ProtectedRoute>} />
       <Route path="/saillies" element={<ProtectedRoute><Saillies /></ProtectedRoute>} />
       <Route path="/portees" element={<ProtectedRoute><Portees /></ProtectedRoute>} />
+      <Route path="/post-sevrage" element={<ProtectedRoute><PostSevrage /></ProtectedRoute>} />
       <Route path="/engraissement" element={<ProtectedRoute><Engraissement /></ProtectedRoute>} />
       <Route path="/ventes" element={<ProtectedRoute><Ventes /></ProtectedRoute>} />
       <Route path="/depenses" element={<ProtectedRoute><Depenses /></ProtectedRoute>} />

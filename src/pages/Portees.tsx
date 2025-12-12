@@ -5,13 +5,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { getPortees, getMisesBas, getTruies, addMiseBas, addPortee, getSaillies, updateTruie, updateSaillie, updatePortee, deletePortee, updateMiseBas, deleteMiseBas } from '@/lib/storage';
-import { Portee, MiseBas, Truie, Saillie } from '@/types';
-import { Plus, Baby, Scale, Search, Edit2, Trash2 } from 'lucide-react';
+import { getPortees, getMisesBas, getTruies, addMiseBas, addPortee, getSaillies, updateTruie, updateSaillie, updatePortee, deletePortee, updateMiseBas, deleteMiseBas, addLotPostSevrage, addPesee } from '@/lib/storage';
+import { Portee, MiseBas, Truie, Saillie, LotPostSevrage, Pesee } from '@/types';
+import { Plus, Baby, Scale, Search, Edit2, Trash2, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const statusLabels: Record<Portee['statut'], string> = {
   allaitement: 'En allaitement',
@@ -41,6 +42,16 @@ const Portees = () => {
   });
   const [search, setSearch] = useState('');
   const [editingPortee, setEditingPortee] = useState<Portee | null>(null);
+
+  // Sevrage state
+  const [isSevrageDialogOpen, setIsSevrageDialogOpen] = useState(false);
+  const [sevragePortee, setSevragePortee] = useState<Portee | null>(null);
+  const [sevrageFormData, setSevrageFormData] = useState({
+    date: '',
+    poidsTotal: '',
+    nombreSevles: '',
+    createLot: true,
+  });
 
   useEffect(() => {
     loadData();
@@ -131,6 +142,83 @@ const Portees = () => {
     loadData();
     setIsDialogOpen(false);
     resetForm();
+  };
+
+  const openSevrageDialog = (portee: Portee) => {
+    setSevragePortee(portee);
+    setSevrageFormData({
+      date: new Date().toISOString().split('T')[0],
+      poidsTotal: '',
+      nombreSevles: portee.nombreActuel.toString(),
+      createLot: true,
+    });
+    setIsSevrageDialogOpen(true);
+  };
+
+  const handleSevrageSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sevragePortee || !sevrageFormData.date || !sevrageFormData.poidsTotal || !sevrageFormData.nombreSevles) {
+      toast.error('Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+
+    const truie = truies.find(t => t.id === sevragePortee.truieId);
+    
+    // 1. Update Portee
+    updatePortee(sevragePortee.id, {
+      dateSevrage: sevrageFormData.date,
+      poidsSevrage: parseFloat(sevrageFormData.poidsTotal),
+      nombreActuel: parseInt(sevrageFormData.nombreSevles), // Update current count to weaned count
+      statut: 'sevree',
+    });
+
+    // 2. Update Truie status
+    if (truie) {
+      updateTruie(truie.id, { statut: 'active' }); // Back to active (ready for new cycle)
+    }
+
+    // 3. Create Post-Sevrage Lot if requested
+    if (sevrageFormData.createLot) {
+      const weanedCount = parseInt(sevrageFormData.nombreSevles);
+      const totalWeight = parseFloat(sevrageFormData.poidsTotal);
+      const avgWeight = Math.round((totalWeight / weanedCount) * 100) / 100;
+
+      const newLot: LotPostSevrage = {
+        id: Date.now().toString(),
+        identification: `LOT-${truie ? truie.identification : 'UNK'}-${format(new Date(), 'ddMMyy')}`,
+        dateCreation: new Date().toISOString().split('T')[0],
+        origine: 'sevrage',
+        porteeId: sevragePortee.id,
+        nombreInitial: weanedCount,
+        nombreActuel: weanedCount,
+        poidsEntree: avgWeight,
+        dateEntree: sevrageFormData.date,
+        poidsCible: 25, // Default target for PS
+        statut: 'en_cours',
+        notes: `Sevrage de ${truie?.identification}`,
+      };
+
+      addLotPostSevrage(newLot);
+
+      // Add initial weighing
+      const initialPesee: Pesee = {
+        id: (Date.now() + 1).toString(),
+        lotId: newLot.id,
+        date: sevrageFormData.date,
+        poidsMoyen: avgWeight,
+        nombrePeses: weanedCount,
+        notes: 'Pesée de sevrage',
+      };
+      addPesee(initialPesee);
+      
+      toast.success('Portée sevrée et lot créé avec succès');
+    } else {
+      toast.success('Portée sevrée avec succès');
+    }
+
+    loadData();
+    setIsSevrageDialogOpen(false);
+    setSevragePortee(null);
   };
 
   const confirmedSaillies = saillies.filter(s => 
@@ -279,6 +367,70 @@ const Portees = () => {
               </form>
             </DialogContent>
           </Dialog>
+
+          {/* Sevrage Dialog */}
+          <Dialog open={isSevrageDialogOpen} onOpenChange={setIsSevrageDialogOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="font-display">
+                  Sevrer la portée
+                </DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSevrageSubmit} className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="sevrageDate">Date de sevrage *</Label>
+                  <Input
+                    id="sevrageDate"
+                    type="date"
+                    value={sevrageFormData.date}
+                    onChange={(e) => setSevrageFormData(prev => ({ ...prev, date: e.target.value }))}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="nombreSevles">Nombre sevrés *</Label>
+                    <Input
+                      id="nombreSevles"
+                      type="number"
+                      value={sevrageFormData.nombreSevles}
+                      onChange={(e) => setSevrageFormData(prev => ({ ...prev, nombreSevles: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="poidsTotal">Poids TOTAL (kg) *</Label>
+                    <Input
+                      id="poidsTotal"
+                      type="number"
+                      step="0.1"
+                      placeholder="85"
+                      value={sevrageFormData.poidsTotal}
+                      onChange={(e) => setSevrageFormData(prev => ({ ...prev, poidsTotal: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                
+                <div className="flex items-center space-x-2 py-2">
+                  <Checkbox 
+                    id="createLot" 
+                    checked={sevrageFormData.createLot}
+                    onCheckedChange={(checked) => setSevrageFormData(prev => ({ ...prev, createLot: checked as boolean }))}
+                  />
+                  <Label htmlFor="createLot" className="font-normal cursor-pointer">
+                    Créer automatiquement un lot Post-Sevrage
+                  </Label>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <Button type="button" variant="outline" onClick={() => setIsSevrageDialogOpen(false)} className="flex-1">
+                    Annuler
+                  </Button>
+                  <Button type="submit" className="flex-1">
+                    Valider le sevrage
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Search */}
@@ -384,9 +536,22 @@ const Portees = () => {
                       </div>
                       <p className="font-medium text-foreground">
                         {format(new Date(portee.dateSevrage), "d MMMM yyyy", { locale: fr })}
-                        {portee.poidsSevrage && ` - ${portee.poidsSevrage} kg`}
+                        {portee.poidsSevrage && ` - ${portee.poidsSevrage} kg total`}
                       </p>
                     </div>
+                  )}
+
+                  {!portee.dateSevrage && (
+                     <div className="mt-4 pt-4 border-t border-border">
+                      <Button 
+                        className="w-full gap-2" 
+                        variant="secondary"
+                        onClick={() => openSevrageDialog(portee)}
+                      >
+                        <ArrowRight className="h-4 w-4" />
+                        Sevrer la portée
+                      </Button>
+                     </div>
                   )}
                 </div>
               );

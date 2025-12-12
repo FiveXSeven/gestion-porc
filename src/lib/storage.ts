@@ -1,4 +1,4 @@
-import { User, Truie, Verrat, Saillie, MiseBas, Portee, Vente, Depense, Alert, LotEngraissement, Pesee } from '@/types';
+import { User, Truie, Verrat, Saillie, MiseBas, Portee, Vente, Depense, Alert, LotEngraissement, LotPostSevrage, Pesee } from '@/types';
 
 const STORAGE_KEYS = {
   USER: 'porcherie_user',
@@ -12,6 +12,7 @@ const STORAGE_KEYS = {
   ALERTS: 'porcherie_alerts',
   IS_AUTHENTICATED: 'porcherie_authenticated',
   LOTS_ENGRAISSEMENT: 'porcherie_lots_engraissement',
+  LOTS_POST_SEVRAGE: 'porcherie_lots_post_sevrage',
   PESEES: 'porcherie_pesees',
 };
 
@@ -218,6 +219,27 @@ export const updateLot = (id: string, updates: Partial<LotEngraissement>): void 
 export const deleteLot = (id: string): void => {
   const items = getLots().filter(i => i.id !== id);
   saveLots(items);
+};
+
+// Lots Post-Sevrage
+export const getLotsPostSevrage = (): LotPostSevrage[] => getItems<LotPostSevrage>(STORAGE_KEYS.LOTS_POST_SEVRAGE);
+export const saveLotsPostSevrage = (items: LotPostSevrage[]): void => saveItems(STORAGE_KEYS.LOTS_POST_SEVRAGE, items);
+export const addLotPostSevrage = (item: LotPostSevrage): void => {
+  const items = getLotsPostSevrage();
+  items.push(item);
+  saveLotsPostSevrage(items);
+};
+export const updateLotPostSevrage = (id: string, updates: Partial<LotPostSevrage>): void => {
+  const items = getLotsPostSevrage();
+  const index = items.findIndex(i => i.id === id);
+  if (index !== -1) {
+    items[index] = { ...items[index], ...updates };
+    saveLotsPostSevrage(items);
+  }
+};
+export const deleteLotPostSevrage = (id: string): void => {
+  const items = getLotsPostSevrage().filter(i => i.id !== id);
+  saveLotsPostSevrage(items);
 };
 
 // Pesées

@@ -89,7 +89,7 @@ export interface LotEngraissement {
   id: string;
   identification: string;
   dateCreation: string;
-  origine: 'sevrage' | 'achat';
+  origine: 'sevrage' | 'achat' | 'post-sevrage';
   porteeId?: string;
   nombreInitial: number;
   nombreActuel: number;
@@ -97,6 +97,22 @@ export interface LotEngraissement {
   dateEntree: string;
   poidsCible: number;
   statut: 'en_cours' | 'vendu' | 'partiel';
+  notes: string;
+}
+
+
+export interface LotPostSevrage {
+  id: string;
+  identification: string;
+  dateCreation: string;
+  origine: 'sevrage' | 'achat';
+  porteeId?: string;
+  nombreInitial: number;
+  nombreActuel: number;
+  poidsEntree: number;
+  dateEntree: string;
+  poidsCible: number;
+  statut: 'en_cours' | 'transfere' | 'vendu' | 'partiel';
   notes: string;
 }
 

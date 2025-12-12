@@ -13,7 +13,8 @@ import {
   Menu,
   X,
   Warehouse,
-  Scale
+  Scale,
+  Layers
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,7 @@ const navItems = [
   { to: '/truies', icon: PiggyBank, label: 'Truies' },
   { to: '/saillies', icon: Heart, label: 'Saillies' },
   { to: '/portees', icon: Baby, label: 'Portées' },
+  { to: '/post-sevrage', icon: Layers, label: 'Post-Sevrage' },
   { to: '/engraissement', icon: Scale, label: 'Engraissement' },
   { to: '/ventes', icon: ShoppingCart, label: 'Ventes' },
   { to: '/depenses', icon: Receipt, label: 'Dépenses' },
