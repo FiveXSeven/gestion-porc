@@ -1,4 +1,4 @@
-import { User, Truie, Verrat, Saillie, MiseBas, Portee, Vente, Depense, Alert, LotEngraissement, LotPostSevrage, Pesee } from '@/types';
+import { User, Truie, Verrat, Saillie, MiseBas, Portee, Vente, Depense, Alert, LotEngraissement, LotPostSevrage, Pesee, StockAliment } from '@/types';
 
 const STORAGE_KEYS = {
   USER: 'porcherie_user',
@@ -14,6 +14,7 @@ const STORAGE_KEYS = {
   LOTS_ENGRAISSEMENT: 'porcherie_lots_engraissement',
   LOTS_POST_SEVRAGE: 'porcherie_lots_post_sevrage',
   PESEES: 'porcherie_pesees',
+  STOCK_ALIMENT: 'porcherie_stock_aliment',
 };
 
 // User management
@@ -256,6 +257,27 @@ export const getPeseesForLot = (lotId: string): Pesee[] => {
   );
 };
 
+// Stock Aliment
+export const getStockAliments = (): StockAliment[] => getItems<StockAliment>(STORAGE_KEYS.STOCK_ALIMENT);
+export const saveStockAliments = (items: StockAliment[]): void => saveItems(STORAGE_KEYS.STOCK_ALIMENT, items);
+export const addStockAliment = (item: StockAliment): void => {
+  const items = getStockAliments();
+  items.push(item);
+  saveStockAliments(items);
+};
+export const updateStockAliment = (id: string, updates: Partial<StockAliment>): void => {
+  const items = getStockAliments();
+  const index = items.findIndex(i => i.id === id);
+  if (index !== -1) {
+    items[index] = { ...items[index], ...updates };
+    saveStockAliments(items);
+  }
+};
+export const deleteStockAliment = (id: string): void => {
+  const items = getStockAliments().filter(i => i.id !== id);
+  saveStockAliments(items);
+};
+
 // Initialize demo data
 export const initializeDemoData = (): void => {
   if (getTruies().length === 0) {
@@ -395,5 +417,14 @@ export const initializeDemoData = (): void => {
       { id: '13', lotId: '3', date: '2024-12-10', poidsMoyen: 52, nombrePeses: 20, notes: '' },
     ];
     savePesees(demoPesees);
+  }
+
+  if (getStockAliments().length === 0) {
+    const demoStock: StockAliment[] = [
+      { id: '1', nom: 'Croissance Porc', type: 'Croissance', quantite: 10, poidsSac: 40, dateMiseAJour: '2024-12-01' },
+      { id: '2', nom: 'Demarrage Porcelet', type: 'Démarrage', quantite: 3, poidsSac: 25, dateMiseAJour: '2024-12-05' },
+      { id: '3', nom: 'Gestation Truie', type: 'Reproduction', quantite: 8, poidsSac: 40, dateMiseAJour: '2024-12-10' },
+    ];
+    saveStockAliments(demoStock);
   }
 };

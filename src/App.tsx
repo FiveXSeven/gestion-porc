@@ -13,6 +13,7 @@ import Saillies from "./pages/Saillies";
 import Portees from "./pages/Portees";
 import Ventes from "./pages/Ventes";
 import Depenses from "./pages/Depenses";
+import StockAliment from "./pages/StockAliment";
 import Alertes from "./pages/Alertes";
 import Engraissement from "./pages/Engraissement";
 import PostSevrage from "./pages/PostSevrage";
@@ -43,6 +44,7 @@ const AppRoutes = () => {
       <Route path="/engraissement" element={<ProtectedRoute><Engraissement /></ProtectedRoute>} />
       <Route path="/ventes" element={<ProtectedRoute><Ventes /></ProtectedRoute>} />
       <Route path="/depenses" element={<ProtectedRoute><Depenses /></ProtectedRoute>} />
+      <Route path="/stock-aliment" element={<ProtectedRoute><StockAliment /></ProtectedRoute>} />
       <Route path="/alertes" element={<ProtectedRoute><Alertes /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>

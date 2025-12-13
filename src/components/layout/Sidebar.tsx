@@ -14,7 +14,8 @@ import {
   X,
   Warehouse,
   Scale,
-  Layers
+  Layers,
+  Package
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,7 @@ const navItems = [
   { to: '/portees', icon: Baby, label: 'Portées' },
   { to: '/post-sevrage', icon: Layers, label: 'Post-Sevrage' },
   { to: '/engraissement', icon: Scale, label: 'Engraissement' },
+  { to: '/stock-aliment', icon: Package, label: 'Stock Aliment' },
   { to: '/ventes', icon: ShoppingCart, label: 'Ventes' },
   { to: '/depenses', icon: Receipt, label: 'Dépenses' },
   { to: '/alertes', icon: Bell, label: 'Alertes' },

@@ -124,3 +124,12 @@ export interface Pesee {
   nombrePeses: number;
   notes: string;
 }
+
+export interface StockAliment {
+  id: string;
+  nom: string;
+  type: string;
+  quantite: number; // Nombre de sacs
+  poidsSac: 25 | 40 | number; // 25kg ou 40kg, allow number for flexibility but UI will enforce
+  dateMiseAJour: string;
+}
