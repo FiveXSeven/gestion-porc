@@ -5,14 +5,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { getDepenses, addDepense } from '@/lib/storage';
+import * as api from '@/lib/api';
 import { Depense } from '@/types';
 import { Plus, Receipt, TrendingDown, Wheat, Stethoscope, Wrench, Users, Building, MoreHorizontal, Search, Edit2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-import { updateDepense, deleteDepense } from '@/lib/storage';
 
 const categorieLabels: Record<Depense['categorie'], string> = {
   alimentation: 'Alimentation',
@@ -58,8 +57,14 @@ const Depenses = () => {
     loadDepenses();
   }, []);
 
-  const loadDepenses = () => {
-    setDepenses(getDepenses());
+  const loadDepenses = async () => {
+    try {
+      const data = await api.getDepenses();
+      setDepenses(data);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors du chargement des dépenses');
+    }
   };
 
   const resetForm = () => {
@@ -73,9 +78,9 @@ const Depenses = () => {
     setEditingDepense(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.date || !formData.montant) {
       toast.error('Veuillez remplir tous les champs obligatoires');
       return;
@@ -89,28 +94,33 @@ const Depenses = () => {
       fournisseur: formData.fournisseur,
     };
 
-    if (editingDepense) {
-      updateDepense(editingDepense.id, newDepenseData);
-      toast.success('Dépense modifiée avec succès');
-    } else {
-      const newDepense: Depense = {
-        id: Date.now().toString(),
-        ...newDepenseData,
-      };
-      
-      addDepense(newDepense);
-      toast.success('Dépense enregistrée avec succès');
-    }
+    try {
+      if (editingDepense) {
+        await api.updateDepense(editingDepense.id, newDepenseData);
+        toast.success('Dépense modifiée avec succès');
+      } else {
+        const newDepense: Depense = {
+          id: '',
+          ...newDepenseData,
+        };
 
-    loadDepenses();
-    setIsDialogOpen(false);
-    resetForm();
+        await api.addDepense(newDepense);
+        toast.success('Dépense enregistrée avec succès');
+      }
+
+      loadDepenses();
+      setIsDialogOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de l\'enregistrement');
+    }
   };
 
   const handleEdit = (depense: Depense) => {
     setEditingDepense(depense);
     setFormData({
-      date: depense.date,
+      date: depense.date.split('T')[0],
       categorie: depense.categorie,
       montant: depense.montant.toString(),
       description: depense.description,
@@ -119,15 +129,20 @@ const Depenses = () => {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Êtes-vous sûr de vouloir supprimer cette dépense ?')) {
-      deleteDepense(id);
-      loadDepenses();
-      toast.success('Dépense supprimée');
+      try {
+        await api.deleteDepense(id);
+        loadDepenses();
+        toast.success('Dépense supprimée');
+      } catch (error) {
+        console.error(error);
+        toast.error('Erreur lors de la suppression');
+      }
     }
   };
 
-  const filteredDepenses = depenses.filter(depense => 
+  const filteredDepenses = depenses.filter(depense =>
     (depense.description.toLowerCase().includes(search.toLowerCase())) ||
     (depense.fournisseur?.toLowerCase() || '').includes(search.toLowerCase()) ||
     categorieLabels[depense.categorie].toLowerCase().includes(search.toLowerCase())
@@ -251,7 +266,7 @@ const Depenses = () => {
             </div>
             <p className="text-4xl font-display font-bold text-foreground">{totalDepenses.toLocaleString()} FCFA</p>
           </div>
-          
+
           {depensesByCategory.length > 0 && (
             <div className="bg-card rounded-2xl border border-border p-6 animate-slide-up" style={{ animationDelay: '0.1s' }}>
               <h3 className="font-semibold text-foreground mb-4">Répartition par catégorie</h3>
@@ -325,8 +340,8 @@ const Depenses = () => {
                   filteredDepenses.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((depense, index) => {
                     const Icon = categorieIcons[depense.categorie];
                     return (
-                      <tr 
-                        key={depense.id} 
+                      <tr
+                        key={depense.id}
                         className="hover:bg-muted/30 transition-colors animate-fade-in"
                         style={{ animationDelay: `${index * 0.05}s` }}
                       >

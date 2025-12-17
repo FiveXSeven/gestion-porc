@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { getLots, addLot, getPeseesForLot, addPesee, updateLot } from '@/lib/storage';
+import * as api from '@/lib/api';
 import { LotEngraissement, Pesee } from '@/types';
 import { Plus, Scale, TrendingUp, Calendar, Target, Eye, Search, Edit2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -13,7 +13,6 @@ import { format, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { deleteLot } from '@/lib/storage';
 
 const statusLabels: Record<LotEngraissement['statut'], string> = {
   en_cours: 'En cours',
@@ -29,13 +28,14 @@ const statusColors: Record<LotEngraissement['statut'], string> = {
 
 const Engraissement = () => {
   const [lots, setLots] = useState<LotEngraissement[]>([]);
+  const [pesees, setPesees] = useState<Pesee[]>([]);
   const [isLotDialogOpen, setIsLotDialogOpen] = useState(false);
   const [isPeseeDialogOpen, setIsPeseeDialogOpen] = useState(false);
   const [selectedLotId, setSelectedLotId] = useState<string | null>(null);
   const [detailLot, setDetailLot] = useState<LotEngraissement | null>(null);
   const [search, setSearch] = useState('');
   const [editingLot, setEditingLot] = useState<LotEngraissement | null>(null);
-  
+
   const [lotFormData, setLotFormData] = useState({
     identification: '',
     dateEntree: '',
@@ -54,11 +54,21 @@ const Engraissement = () => {
   });
 
   useEffect(() => {
-    loadLots();
+    loadData();
   }, []);
 
-  const loadLots = () => {
-    setLots(getLots());
+  const loadData = async () => {
+    try {
+      const [lotsData, peseesData] = await Promise.all([
+        api.getLotsEngraissement(),
+        api.getPesees()
+      ]);
+      setLots(lotsData);
+      setPesees(peseesData);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors du chargement des données');
+    }
   };
 
   const resetLotForm = () => {
@@ -83,9 +93,9 @@ const Engraissement = () => {
     });
   };
 
-  const handleLotSubmit = (e: React.FormEvent) => {
+  const handleLotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!lotFormData.identification || !lotFormData.dateEntree || !lotFormData.nombreInitial || !lotFormData.poidsEntree) {
       toast.error('Veuillez remplir tous les champs obligatoires');
       return;
@@ -94,58 +104,63 @@ const Engraissement = () => {
     const nombreInitial = parseInt(lotFormData.nombreInitial);
     const poidsEntree = parseFloat(lotFormData.poidsEntree);
 
-    if (editingLot) {
-      updateLot(editingLot.id, {
-        identification: lotFormData.identification,
-        origine: lotFormData.origine,
-        dateEntree: lotFormData.dateEntree,
-        nombreInitial,
-        poidsEntree,
-        poidsCible: parseFloat(lotFormData.poidsCible) || 115,
-        notes: lotFormData.notes,
-      });
-      toast.success('Lot modifié avec succès');
-    } else {
-      const newLot: LotEngraissement = {
-        id: Date.now().toString(),
-        identification: lotFormData.identification,
-        dateCreation: new Date().toISOString().split('T')[0],
-        origine: lotFormData.origine,
-        nombreInitial,
-        nombreActuel: nombreInitial,
-        poidsEntree,
-        dateEntree: lotFormData.dateEntree,
-        poidsCible: parseFloat(lotFormData.poidsCible) || 115,
-        statut: 'en_cours',
-        notes: lotFormData.notes,
-      };
-      
-      addLot(newLot);
-  
-      // Add initial weighing
-      const initialPesee: Pesee = {
-        id: (Date.now() + 1).toString(),
-        lotId: newLot.id,
-        date: lotFormData.dateEntree,
-        poidsMoyen: poidsEntree,
-        nombrePeses: nombreInitial,
-        notes: 'Pesée d\'entrée',
-      };
-      addPesee(initialPesee);
-  
-      toast.success('Lot créé avec succès');
-    }
+    try {
+      if (editingLot) {
+        await api.updateLotEngraissement(editingLot.id, {
+          identification: lotFormData.identification,
+          origine: lotFormData.origine,
+          dateEntree: lotFormData.dateEntree,
+          nombreInitial,
+          poidsEntree,
+          poidsCible: parseFloat(lotFormData.poidsCible) || 115,
+          notes: lotFormData.notes,
+        });
+        toast.success('Lot modifié avec succès');
+      } else {
+        const newLot: LotEngraissement = {
+          id: '',
+          identification: lotFormData.identification,
+          dateCreation: new Date().toISOString().split('T')[0],
+          origine: lotFormData.origine,
+          nombreInitial,
+          nombreActuel: nombreInitial,
+          poidsEntree,
+          dateEntree: lotFormData.dateEntree,
+          poidsCible: parseFloat(lotFormData.poidsCible) || 115,
+          statut: 'en_cours',
+          notes: lotFormData.notes,
+        };
 
-    loadLots();
-    setIsLotDialogOpen(false);
-    resetLotForm();
+        const createdLot = await api.addLotEngraissement(newLot);
+
+        // Add initial weighing
+        const initialPesee: Pesee = {
+          id: '',
+          lotId: createdLot.id,
+          date: lotFormData.dateEntree,
+          poidsMoyen: poidsEntree,
+          nombrePeses: nombreInitial,
+          notes: 'Pesée d\'entrée',
+        };
+        await api.addPesee(initialPesee);
+
+        toast.success('Lot créé avec succès');
+      }
+
+      loadData();
+      setIsLotDialogOpen(false);
+      resetLotForm();
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de l\'enregistrement');
+    }
   };
 
   const handleEdit = (lot: LotEngraissement) => {
     setEditingLot(lot);
     setLotFormData({
       identification: lot.identification,
-      dateEntree: lot.dateEntree,
+      dateEntree: lot.dateEntree.split('T')[0],
       origine: lot.origine,
       nombreInitial: lot.nombreInitial.toString(),
       poidsEntree: lot.poidsEntree.toString(),
@@ -155,21 +170,26 @@ const Engraissement = () => {
     setIsLotDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Êtes-vous sûr de vouloir supprimer ce lot ?')) {
-      deleteLot(id);
-      loadLots();
-      toast.success('Lot supprimé');
+      try {
+        await api.deleteLotEngraissement(id);
+        loadData();
+        toast.success('Lot supprimé');
+      } catch (error) {
+        console.error(error);
+        toast.error('Erreur lors de la suppression');
+      }
     }
   };
 
-  const filteredLots = lots.filter(lot => 
+  const filteredLots = lots.filter(lot =>
     lot.identification.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handlePeseeSubmit = (e: React.FormEvent) => {
+  const handlePeseeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!selectedLotId || !peseeFormData.date || !peseeFormData.poidsMoyen) {
       toast.error('Veuillez remplir tous les champs obligatoires');
       return;
@@ -178,25 +198,30 @@ const Engraissement = () => {
     const lot = lots.find(l => l.id === selectedLotId);
     if (!lot) return;
 
-    const newPesee: Pesee = {
-      id: Date.now().toString(),
-      lotId: selectedLotId,
-      date: peseeFormData.date,
-      poidsMoyen: parseFloat(peseeFormData.poidsMoyen),
-      nombrePeses: parseInt(peseeFormData.nombrePeses) || lot.nombreActuel,
-      notes: peseeFormData.notes,
-    };
-    
-    addPesee(newPesee);
-    toast.success('Pesée enregistrée');
-    loadLots();
-    setIsPeseeDialogOpen(false);
-    resetPeseeForm();
-    setSelectedLotId(null);
+    try {
+      const newPesee: Pesee = {
+        id: '',
+        lotId: selectedLotId,
+        date: peseeFormData.date,
+        poidsMoyen: parseFloat(peseeFormData.poidsMoyen),
+        nombrePeses: parseInt(peseeFormData.nombrePeses) || lot.nombreActuel,
+        notes: peseeFormData.notes,
+      };
 
-    // Update detail view if open
-    if (detailLot && detailLot.id === selectedLotId) {
-      setDetailLot(lot);
+      await api.addPesee(newPesee);
+      toast.success('Pesée enregistrée');
+      loadData();
+      setIsPeseeDialogOpen(false);
+      resetPeseeForm();
+      setSelectedLotId(null);
+
+      // Update detail view if open
+      if (detailLot && detailLot.id === selectedLotId) {
+        setDetailLot(lot);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de l\'enregistrement de la pesée');
     }
   };
 
@@ -209,38 +234,42 @@ const Engraissement = () => {
     setIsPeseeDialogOpen(true);
   };
 
-  const calculateGMQ = (lot: LotEngraissement): number | null => {
-    const pesees = getPeseesForLot(lot.id);
-    if (pesees.length < 2) return null;
+  const getPeseesForLot = (lotId: string) => {
+    return pesees.filter(p => p.lotId === lotId).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  };
 
-    const firstPesee = pesees[0];
-    const lastPesee = pesees[pesees.length - 1];
+  const calculateGMQ = (lot: LotEngraissement): number | null => {
+    const lotPesees = getPeseesForLot(lot.id);
+    if (lotPesees.length < 2) return null;
+
+    const firstPesee = lotPesees[0];
+    const lastPesee = lotPesees[lotPesees.length - 1];
     const days = differenceInDays(new Date(lastPesee.date), new Date(firstPesee.date));
-    
+
     if (days === 0) return null;
-    
+
     return Math.round(((lastPesee.poidsMoyen - firstPesee.poidsMoyen) / days) * 1000) / 1000;
   };
 
   const calculateDaysToTarget = (lot: LotEngraissement): number | null => {
-    const pesees = getPeseesForLot(lot.id);
-    if (pesees.length === 0) return null;
+    const lotPesees = getPeseesForLot(lot.id);
+    if (lotPesees.length === 0) return null;
 
-    const lastPesee = pesees[pesees.length - 1];
+    const lastPesee = lotPesees[lotPesees.length - 1];
     const gmq = calculateGMQ(lot);
-    
+
     if (!gmq || gmq <= 0) return null;
-    
+
     const remainingWeight = lot.poidsCible - lastPesee.poidsMoyen;
     if (remainingWeight <= 0) return 0;
-    
+
     return Math.ceil(remainingWeight / gmq);
   };
 
   const getLastWeight = (lotId: string): number | null => {
-    const pesees = getPeseesForLot(lotId);
-    if (pesees.length === 0) return null;
-    return pesees[pesees.length - 1].poidsMoyen;
+    const lotPesees = getPeseesForLot(lotId);
+    if (lotPesees.length === 0) return null;
+    return lotPesees[lotPesees.length - 1].poidsMoyen;
   };
 
   const lotsEnCours = lots.filter(l => l.statut === 'en_cours');
@@ -248,8 +277,8 @@ const Engraissement = () => {
 
   // Calculate average GMQ
   const gmqValues = lotsEnCours.map(l => calculateGMQ(l)).filter((g): g is number => g !== null);
-  const avgGMQ = gmqValues.length > 0 
-    ? Math.round((gmqValues.reduce((a, b) => a + b, 0) / gmqValues.length) * 1000) / 1000 
+  const avgGMQ = gmqValues.length > 0
+    ? Math.round((gmqValues.reduce((a, b) => a + b, 0) / gmqValues.length) * 1000) / 1000
     : null;
 
   return (
@@ -502,11 +531,11 @@ const Engraissement = () => {
                         poids: p.poidsMoyen,
                       }))}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis 
-                          dataKey="date" 
+                        <XAxis
+                          dataKey="date"
                           tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
                         />
-                        <YAxis 
+                        <YAxis
                           tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
                           domain={['dataMin - 5', 'dataMax + 10']}
                         />
@@ -518,10 +547,10 @@ const Engraissement = () => {
                           }}
                           formatter={(value: number) => [`${value} kg`, 'Poids moyen']}
                         />
-                        <Line 
-                          type="monotone" 
-                          dataKey="poids" 
-                          stroke="hsl(var(--primary))" 
+                        <Line
+                          type="monotone"
+                          dataKey="poids"
+                          stroke="hsl(var(--primary))"
                           strokeWidth={3}
                           dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 5 }}
                         />
@@ -599,7 +628,7 @@ const Engraissement = () => {
                       {statusLabels[lot.statut]}
                     </span>
                   </div>
-                  
+
                   <div className="flex gap-1 absolute top-6 right-6">
                     <Button
                       variant="ghost"
@@ -626,7 +655,7 @@ const Engraissement = () => {
                       <span className="font-medium text-foreground">{lastWeight || lot.poidsEntree} / {lot.poidsCible} kg</span>
                     </div>
                     <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      <div 
+                      <div
                         className="h-full rounded-full bg-primary transition-all duration-500"
                         style={{ width: `${progress}%` }}
                       />

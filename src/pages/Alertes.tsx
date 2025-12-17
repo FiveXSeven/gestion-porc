@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { getAlerts, markAlertRead, saveAlerts } from '@/lib/storage';
+import * as api from '@/lib/api';
 import { Alert } from '@/types';
 import { Bell, Baby, Calendar, ShoppingCart, HeartPulse, Check, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -38,28 +38,48 @@ const Alertes = () => {
     loadAlerts();
   }, []);
 
-  const loadAlerts = () => {
-    setAlerts(getAlerts());
+  const loadAlerts = async () => {
+    try {
+      const data = await api.getAlerts();
+      setAlerts(data);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors du chargement des alertes');
+    }
   };
 
-  const handleMarkRead = (id: string) => {
-    markAlertRead(id);
-    loadAlerts();
-    toast.success('Alerte marquée comme lue');
+  const handleMarkRead = async (id: string) => {
+    try {
+      await api.markAlertRead(id);
+      loadAlerts();
+      toast.success('Alerte marquée comme lue');
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la mise à jour');
+    }
   };
 
-  const handleMarkAllRead = () => {
-    const updated = alerts.map(a => ({ ...a, read: true }));
-    saveAlerts(updated);
-    loadAlerts();
-    toast.success('Toutes les alertes marquées comme lues');
+  const handleMarkAllRead = async () => {
+    try {
+      const unreadAlerts = alerts.filter(a => !a.read);
+      await Promise.all(unreadAlerts.map(a => api.markAlertRead(a.id)));
+      loadAlerts();
+      toast.success('Toutes les alertes marquées comme lues');
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la mise à jour');
+    }
   };
 
-  const handleDelete = (id: string) => {
-    const updated = alerts.filter(a => a.id !== id);
-    saveAlerts(updated);
-    loadAlerts();
-    toast.success('Alerte supprimée');
+  const handleDelete = async (id: string) => {
+    try {
+      await api.deleteAlert(id);
+      loadAlerts();
+      toast.success('Alerte supprimée');
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+    }
   };
 
   const filteredAlerts = alerts.filter(alert => {
@@ -132,7 +152,7 @@ const Alertes = () => {
                   )}>
                     <Icon className="h-6 w-6" />
                   </div>
-                  
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className={cn(

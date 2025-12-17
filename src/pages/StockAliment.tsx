@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
-import { getStockAliments, addStockAliment, updateStockAliment, deleteStockAliment } from '@/lib/storage';
+import * as api from '@/lib/api';
 import { StockAliment } from '@/types';
 import { Plus, Package, AlertTriangle, Edit2, Trash2, Search, Minus, ArrowDown, ArrowUp } from 'lucide-react';
 import { toast } from 'sonner';
@@ -40,8 +40,14 @@ const StockAlimentPage = () => {
     loadStocks();
   }, []);
 
-  const loadStocks = () => {
-    setStocks(getStockAliments());
+  const loadStocks = async () => {
+    try {
+      const data = await api.getStockAliments();
+      setStocks(data);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors du chargement des stocks');
+    }
   };
 
   const resetForm = () => {
@@ -54,9 +60,9 @@ const StockAlimentPage = () => {
     setEditingStock(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.nom || !formData.type || !formData.quantite) {
       toast.error('Veuillez remplir tous les champs obligatoires');
       return;
@@ -70,22 +76,27 @@ const StockAlimentPage = () => {
       dateMiseAJour: new Date().toISOString().split('T')[0],
     };
 
-    if (editingStock) {
-      updateStockAliment(editingStock.id, newStockData);
-      toast.success('Stock modifié avec succès');
-    } else {
-      const newStock: StockAliment = {
-        id: Date.now().toString(),
-        ...newStockData,
-      };
-      
-      addStockAliment(newStock);
-      toast.success('Stock ajouté avec succès');
-    }
+    try {
+      if (editingStock) {
+        await api.updateStockAliment(editingStock.id, newStockData);
+        toast.success('Stock modifié avec succès');
+      } else {
+        const newStock: StockAliment = {
+          id: '',
+          ...newStockData,
+        };
 
-    loadStocks();
-    setIsDialogOpen(false);
-    resetForm();
+        await api.addStockAliment(newStock);
+        toast.success('Stock ajouté avec succès');
+      }
+
+      loadStocks();
+      setIsDialogOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de l\'enregistrement');
+    }
   };
 
   const handleEdit = (stock: StockAliment) => {
@@ -99,11 +110,16 @@ const StockAlimentPage = () => {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Êtes-vous sûr de vouloir supprimer ce stock ?')) {
-      deleteStockAliment(id);
-      loadStocks();
-      toast.success('Stock supprimé');
+      try {
+        await api.deleteStockAliment(id);
+        loadStocks();
+        toast.success('Stock supprimé');
+      } catch (error) {
+        console.error(error);
+        toast.error('Erreur lors de la suppression');
+      }
     }
   };
 
@@ -116,40 +132,45 @@ const StockAlimentPage = () => {
     setMovementAmount('');
   };
 
-  const handleMovementSubmit = (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!movementDialog.stock || !movementAmount) return;
+  const handleMovementSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!movementDialog.stock || !movementAmount) return;
 
-      const amount = parseInt(movementAmount);
-      if (isNaN(amount) || amount <= 0) {
-          toast.error('Veuillez entrer une quantité valide');
-          return;
+    const amount = parseInt(movementAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Veuillez entrer une quantité valide');
+      return;
+    }
+
+    const currentQty = movementDialog.stock.quantite;
+    let newQty = currentQty;
+
+    if (movementDialog.type === 'add') {
+      newQty = currentQty + amount;
+    } else {
+      if (amount > currentQty) {
+        toast.error('Quantité insuffisante en stock');
+        return;
       }
+      newQty = currentQty - amount;
+    }
 
-      const currentQty = movementDialog.stock.quantite;
-      let newQty = currentQty;
-
-      if (movementDialog.type === 'add') {
-          newQty = currentQty + amount;
-      } else {
-          if (amount > currentQty) {
-              toast.error('Quantité insuffisante en stock');
-              return;
-          }
-          newQty = currentQty - amount;
-      }
-
-      updateStockAliment(movementDialog.stock.id, {
-          quantite: newQty,
-          dateMiseAJour: new Date().toISOString().split('T')[0],
+    try {
+      await api.updateStockAliment(movementDialog.stock.id, {
+        quantite: newQty,
+        dateMiseAJour: new Date().toISOString().split('T')[0],
       });
 
       toast.success(movementDialog.type === 'add' ? 'Stock renforcé' : 'Sacs retirés du stock');
       setMovementDialog({ isOpen: false, type: 'add', stock: null });
       loadStocks();
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la mise à jour du stock');
+    }
   };
 
-  const filteredStocks = stocks.filter(stock => 
+  const filteredStocks = stocks.filter(stock =>
     stock.nom.toLowerCase().includes(search.toLowerCase()) ||
     stock.type.toLowerCase().includes(search.toLowerCase())
   );
@@ -227,7 +248,7 @@ const StockAlimentPage = () => {
                     onChange={(e) => setFormData(prev => ({ ...prev, quantite: e.target.value }))}
                   />
                 </div>
-                
+
                 <div className="flex gap-3 pt-4">
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} className="flex-1">
                     Annuler
@@ -240,34 +261,34 @@ const StockAlimentPage = () => {
             </DialogContent>
           </Dialog>
 
-            {/* Movement Dialog */}
-            <Dialog open={movementDialog.isOpen} onOpenChange={(open) => setMovementDialog(prev => ({ ...prev, isOpen: open }))}>
-                <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                        <DialogTitle>{movementDialog.type === 'add' ? 'Renforcer le stock' : 'Retirer des sacs'}</DialogTitle>
-                        <DialogDescription>
-                            {movementDialog.stock?.nom} - Actuellement: {movementDialog.stock?.quantite} sacs
-                        </DialogDescription>
-                    </DialogHeader>
-                    <form onSubmit={handleMovementSubmit} className="space-y-4 pt-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="movement-qty">Quantité de sacs à {movementDialog.type === 'add' ? 'ajouter' : 'retirer'}</Label>
-                            <Input
-                                id="movement-qty"
-                                type="number"
-                                min="1"
-                                autoFocus
-                                value={movementAmount}
-                                onChange={(e) => setMovementAmount(e.target.value)}
-                            />
-                        </div>
-                        <div className="flex justify-end gap-3">
-                            <Button type="button" variant="outline" onClick={() => setMovementDialog(prev => ({ ...prev, isOpen: false }))}>Annuler</Button>
-                            <Button type="submit" variant={movementDialog.type === 'remove' ? 'destructive' : 'default'}>Confirmer</Button>
-                        </div>
-                    </form>
-                </DialogContent>
-            </Dialog>
+          {/* Movement Dialog */}
+          <Dialog open={movementDialog.isOpen} onOpenChange={(open) => setMovementDialog(prev => ({ ...prev, isOpen: open }))}>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>{movementDialog.type === 'add' ? 'Renforcer le stock' : 'Retirer des sacs'}</DialogTitle>
+                <DialogDescription>
+                  {movementDialog.stock?.nom} - Actuellement: {movementDialog.stock?.quantite} sacs
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleMovementSubmit} className="space-y-4 pt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="movement-qty">Quantité de sacs à {movementDialog.type === 'add' ? 'ajouter' : 'retirer'}</Label>
+                  <Input
+                    id="movement-qty"
+                    type="number"
+                    min="1"
+                    autoFocus
+                    value={movementAmount}
+                    onChange={(e) => setMovementAmount(e.target.value)}
+                  />
+                </div>
+                <div className="flex justify-end gap-3">
+                  <Button type="button" variant="outline" onClick={() => setMovementDialog(prev => ({ ...prev, isOpen: false }))}>Annuler</Button>
+                  <Button type="submit" variant={movementDialog.type === 'remove' ? 'destructive' : 'default'}>Confirmer</Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Alerts for Low Stock */}
@@ -285,29 +306,29 @@ const StockAlimentPage = () => {
 
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-           <div className="bg-card p-6 rounded-xl border border-border/50 shadow-sm">
-             <div className="flex justify-between items-start">
-               <div>
-                 <p className="text-sm font-medium text-muted-foreground">Total Sacs</p>
-                 <h3 className="text-2xl font-bold mt-2">{stocks.reduce((acc, curr) => acc + curr.quantite, 0)}</h3>
-               </div>
-               <div className="p-2 bg-primary/10 rounded-lg text-primary">
-                 <Package className="h-5 w-5" />
-               </div>
-             </div>
-           </div>
-           
-           <div className="bg-card p-6 rounded-xl border border-border/50 shadow-sm">
-             <div className="flex justify-between items-start">
-               <div>
-                 <p className="text-sm font-medium text-muted-foreground">Alertes Stock</p>
-                 <h3 className="text-2xl font-bold mt-2">{lowStockItems.length}</h3>
-               </div>
-               <div className="p-2 bg-destructive/10 rounded-lg text-destructive">
-                 <AlertTriangle className="h-5 w-5" />
-               </div>
-             </div>
-           </div>
+          <div className="bg-card p-6 rounded-xl border border-border/50 shadow-sm">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Total Sacs</p>
+                <h3 className="text-2xl font-bold mt-2">{stocks.reduce((acc, curr) => acc + curr.quantite, 0)}</h3>
+              </div>
+              <div className="p-2 bg-primary/10 rounded-lg text-primary">
+                <Package className="h-5 w-5" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-card p-6 rounded-xl border border-border/50 shadow-sm">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Alertes Stock</p>
+                <h3 className="text-2xl font-bold mt-2">{lowStockItems.length}</h3>
+              </div>
+              <div className="p-2 bg-destructive/10 rounded-lg text-destructive">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Search */}
@@ -345,8 +366,8 @@ const StockAlimentPage = () => {
                   </tr>
                 ) : (
                   filteredStocks.map((stock, index) => (
-                    <tr 
-                      key={stock.id} 
+                    <tr
+                      key={stock.id}
                       className={`hover:bg-muted/30 transition-colors animate-fade-in ${stock.quantite < 5 ? 'bg-destructive/5' : ''}`}
                       style={{ animationDelay: `${index * 0.05}s` }}
                     >
@@ -370,26 +391,26 @@ const StockAlimentPage = () => {
                       </td>
                       <td className="py-4 px-6 text-right">
                         <div className="flex justify-end gap-2">
-                         <div className="flex items-center mr-4 bg-muted/50 rounded-lg p-1">
-                              <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => openMovementDialog(stock, 'remove')}
-                                  className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                                  title="Retirer stock"
-                              >
-                                  <ArrowDown className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => openMovementDialog(stock, 'add')}
-                                  className="h-7 w-7 text-primary hover:bg-primary/10"
-                                  title="Ajouter stock"
-                              >
-                                  <ArrowUp className="h-4 w-4" />
-                              </Button>
-                         </div>
+                          <div className="flex items-center mr-4 bg-muted/50 rounded-lg p-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openMovementDialog(stock, 'remove')}
+                              className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                              title="Retirer stock"
+                            >
+                              <ArrowDown className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openMovementDialog(stock, 'add')}
+                              className="h-7 w-7 text-primary hover:bg-primary/10"
+                              title="Ajouter stock"
+                            >
+                              <ArrowUp className="h-4 w-4" />
+                            </Button>
+                          </div>
                           <Button
                             variant="ghost"
                             size="icon"

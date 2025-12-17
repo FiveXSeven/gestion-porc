@@ -3,12 +3,13 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { AlertsList } from '@/components/dashboard/AlertsList';
 import { RevenueChart } from '@/components/dashboard/RevenueChart';
-import { getTruies, getSaillies, getPortees, getVentes, getDepenses, getAlerts, markAlertRead, getLots, getPeseesForLot } from '@/lib/storage';
-import { Truie, Saillie, Portee, Vente, Depense, Alert, LotEngraissement } from '@/types';
+import * as api from '@/lib/api';
+import { Truie, Saillie, Portee, Vente, Depense, Alert, LotEngraissement, Pesee } from '@/types';
 import { PiggyBank, Heart, Baby, TrendingUp, TrendingDown, CalendarDays, Scale } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { format, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { toast } from 'sonner';
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -19,31 +20,64 @@ const Dashboard = () => {
   const [depenses, setDepenses] = useState<Depense[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [lots, setLots] = useState<LotEngraissement[]>([]);
+  const [pesees, setPesees] = useState<Pesee[]>([]);
 
   useEffect(() => {
     loadData();
   }, []);
 
-  const loadData = () => {
-    setTruies(getTruies());
-    setSaillies(getSaillies());
-    setPortees(getPortees());
-    setVentes(getVentes());
-    setDepenses(getDepenses());
-    setAlerts(getAlerts());
-    setLots(getLots());
+  const loadData = async () => {
+    try {
+      const [
+        truiesData,
+        sailliesData,
+        porteesData,
+        ventesData,
+        depensesData,
+        alertsData,
+        lotsData,
+        peseesData
+      ] = await Promise.all([
+        api.getTruies(),
+        api.getSaillies(),
+        api.getPortees(),
+        api.getVentes(),
+        api.getDepenses(),
+        api.getAlerts(),
+        api.getLotsEngraissement(),
+        api.getPesees()
+      ]);
+
+      setTruies(truiesData);
+      setSaillies(sailliesData);
+      setPortees(porteesData);
+      setVentes(ventesData);
+      setDepenses(depensesData);
+      setAlerts(alertsData);
+      setLots(lotsData);
+      setPesees(peseesData);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors du chargement des données du tableau de bord');
+    }
   };
 
-  const handleMarkAlertRead = (id: string) => {
-    markAlertRead(id);
-    setAlerts(getAlerts());
+  const handleMarkAlertRead = async (id: string) => {
+    try {
+      await api.markAlertRead(id);
+      const updatedAlerts = await api.getAlerts();
+      setAlerts(updatedAlerts);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la mise à jour de l\'alerte');
+    }
   };
 
   // Calculate stats
   const truiesActives = truies.filter(t => t.statut !== 'reformee' && t.statut !== 'vendue').length;
   const truiesGestantes = truies.filter(t => t.statut === 'gestante').length;
   const porteesEnCours = portees.filter(p => p.statut === 'allaitement').length;
-  
+
   const totalRecettes = ventes.reduce((sum, v) => sum + v.prixTotal, 0);
   const totalDepenses = depenses.reduce((sum, d) => sum + d.montant, 0);
   const benefice = totalRecettes - totalDepenses;
@@ -51,19 +85,23 @@ const Dashboard = () => {
   // Engraissement stats
   const lotsEnCours = lots.filter(l => l.statut === 'en_cours');
   const totalAnimauxEngraissement = lotsEnCours.reduce((sum, l) => sum + l.nombreActuel, 0);
-  
+
+  const getPeseesForLot = (lotId: string) => {
+    return pesees.filter(p => p.lotId === lotId).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  };
+
   // Calcul du GMQ moyen
   const calculateGMQ = (lot: LotEngraissement): number => {
-    const pesees = getPeseesForLot(lot.id);
-    if (pesees.length < 2) return 0;
-    const firstPesee = pesees[0];
-    const lastPesee = pesees[pesees.length - 1];
+    const lotPesees = getPeseesForLot(lot.id);
+    if (lotPesees.length < 2) return 0;
+    const firstPesee = lotPesees[0];
+    const lastPesee = lotPesees[lotPesees.length - 1];
     const days = differenceInDays(new Date(lastPesee.date), new Date(firstPesee.date));
     if (days === 0) return 0;
     return (lastPesee.poidsMoyen - firstPesee.poidsMoyen) / days;
   };
 
-  const gmqMoyen = lotsEnCours.length > 0 
+  const gmqMoyen = lotsEnCours.length > 0
     ? lotsEnCours.reduce((sum, lot) => sum + calculateGMQ(lot), 0) / lotsEnCours.length
     : 0;
 
@@ -111,7 +149,7 @@ const Dashboard = () => {
           <StatCard
             title="En engraissement"
             value={totalAnimauxEngraissement}
-            subtitle={`GMQ: ${gmqMoyen.toFixed(0)}g/j`}
+            subtitle={`GMQ: ${gmqMoyen.toFixed(3)} kg/j`}
             icon={Scale}
             variant="warning"
           />
@@ -156,7 +194,7 @@ const Dashboard = () => {
               Prochaines mises bas
             </h2>
           </div>
-          
+
           {prochainsMisesBas.length === 0 ? (
             <p className="text-muted-foreground text-center py-8">
               Aucune mise bas prévue prochainement

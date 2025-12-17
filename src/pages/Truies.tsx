@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { getTruies, addTruie, updateTruie, deleteTruie } from '@/lib/storage';
+import * as api from '@/lib/api';
 import { Truie } from '@/types';
 import { Plus, Search, Edit2, Trash2, PiggyBank } from 'lucide-react';
 import { toast } from 'sonner';
@@ -48,8 +48,14 @@ const Truies = () => {
     loadTruies();
   }, []);
 
-  const loadTruies = () => {
-    setTruies(getTruies());
+  const loadTruies = async () => {
+    try {
+      const data = await api.getTruies();
+      setTruies(data);
+    } catch (error) {
+      toast.error('Erreur lors du chargement des truies');
+      console.error(error);
+    }
   };
 
   const resetForm = () => {
@@ -64,41 +70,46 @@ const Truies = () => {
     setEditingTruie(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.identification || !formData.dateEntree || !formData.poids) {
       toast.error('Veuillez remplir tous les champs obligatoires');
       return;
     }
 
-    if (editingTruie) {
-      updateTruie(editingTruie.id, {
-        ...formData,
-        poids: parseFloat(formData.poids),
-      });
-      toast.success('Truie modifiée avec succès');
-    } else {
-      const newTruie: Truie = {
-        id: Date.now().toString(),
-        ...formData,
-        poids: parseFloat(formData.poids),
-      };
-      addTruie(newTruie);
-      toast.success('Truie ajoutée avec succès');
-    }
+    try {
+      if (editingTruie) {
+        await api.updateTruie(editingTruie.id, {
+          ...formData,
+          poids: parseFloat(formData.poids),
+        });
+        toast.success('Truie modifiée avec succès');
+      } else {
+        const newTruie: Truie = {
+          id: '', // Backend will generate ID
+          ...formData,
+          poids: parseFloat(formData.poids),
+        };
+        await api.addTruie(newTruie);
+        toast.success('Truie ajoutée avec succès');
+      }
 
-    loadTruies();
-    setIsDialogOpen(false);
-    resetForm();
+      loadTruies();
+      setIsDialogOpen(false);
+      resetForm();
+    } catch (error) {
+      toast.error('Erreur lors de l\'enregistrement');
+      console.error(error);
+    }
   };
 
   const handleEdit = (truie: Truie) => {
     setEditingTruie(truie);
     setFormData({
       identification: truie.identification,
-      dateEntree: truie.dateEntree,
-      dateNaissance: truie.dateNaissance,
+      dateEntree: truie.dateEntree.split('T')[0], // Ensure format YYYY-MM-DD
+      dateNaissance: truie.dateNaissance.split('T')[0],
       poids: truie.poids.toString(),
       statut: truie.statut,
       notes: truie.notes,
@@ -106,11 +117,16 @@ const Truies = () => {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Êtes-vous sûr de vouloir supprimer cette truie ?')) {
-      deleteTruie(id);
-      loadTruies();
-      toast.success('Truie supprimée');
+      try {
+        await api.deleteTruie(id);
+        loadTruies();
+        toast.success('Truie supprimée');
+      } catch (error) {
+        toast.error('Erreur lors de la suppression');
+        console.error(error);
+      }
     }
   };
 
@@ -273,8 +289,8 @@ const Truies = () => {
                   </tr>
                 ) : (
                   filteredTruies.map((truie, index) => (
-                    <tr 
-                      key={truie.id} 
+                    <tr
+                      key={truie.id}
                       className="hover:bg-muted/30 transition-colors animate-fade-in"
                       style={{ animationDelay: `${index * 0.05}s` }}
                     >
