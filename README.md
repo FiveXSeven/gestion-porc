@@ -1,73 +1,80 @@
-# Welcome to your Lovable project
+# Gestion Porc 🐷
 
-## Project info
+Application complète de gestion de porcherie, conçue pour faciliter le suivi complet de l'élevage, de la reproduction à la vente.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## 📋 Fonctionnalités
 
-## How can I edit this code?
+- **Suivi des Animaux** : Gestion individuelle des truies et verrats, et gestion par lots pour l'engraissement et le post-sevrage.
+- **Reproduction** : Suivi détaillé du cycle de reproduction (Saillies, Mises bas, Sevrages).
+- **Finances** : Enregistrement et suivi des ventes et des dépenses.
+- **Stocks** : Gestion des stocks d'aliments.
+- **Tableau de Bord** : Vue d'ensemble des indicateurs clés et alertes (mises bas à venir, stocks bas, etc.).
 
-There are several ways of editing your application.
+## 🏗 Architecture Technique
 
-**Use Lovable**
+Le projet est divisé en deux parties principales :
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+### 1. Frontend (`/src`)
+Interface utilisateur moderne et responsive construite avec :
+- **React** & **Vite**
+- **TypeScript**
+- **Shadcn UI** & **Tailwind CSS**
+- **TanStack Query** pour la gestion de l'état serveur
 
-Changes made via Lovable will be committed automatically to this repo.
+### 2. Backend (`/backend`)
+API REST robuste gérant la logique métier et les données :
+- **Node.js** & **Express**
+- **TypeScript**
+- **Prisma** (ORM) & **SQLite**
+- **Jest** pour les tests unitaires et d'intégration
 
-**Use your preferred IDE**
+## 📂 Structure du Projet
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+- **`src/`** : Code source du Frontend React.
+  - `pages/` : Les différentes vues de l'application (Dashboard, Truies, etc.).
+  - `components/` : Composants réutilisables (UI).
+  - `lib/` : Utilitaires et client API (`api.ts`).
+  - `types/` : Définitions TypeScript partagées (ou miroirs du backend).
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+- **`backend/`** : Code source de l'API Backend.
+  - [Voir la documentation détaillée du backend](./backend/README.md)
+  - `src/controllers/` : Logique métier.
+  - `src/routes/` : Définition des endpoints.
+  - `prisma/` : Schéma de la base de données.
 
-Follow these steps:
+## 🚀 Démarrage Rapide
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### Prérequis
+- Node.js (v18+)
+- npm
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+### Installation globale
+\`\`\`bash
+npm install
+cd backend && npm install && cd ..
+\`\`\`
 
-# Step 3: Install the necessary dependencies.
-npm i
+### Lancer le projet (Développement)
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+1. **Démarrer le Backend** :
+   \`\`\`bash
+   cd backend
+   npx prisma db push  # Initialiser la BDD si nécessaire
+   npm run dev
+   \`\`\`
+   Le serveur API démarrera sur `http://localhost:3000`.
 
-**Edit a file directly in GitHub**
+2. **Démarrer le Frontend** (dans un nouveau terminal) :
+   \`\`\`bash
+   # Depuis la racine du projet
+   npm run dev
+   \`\`\`
+   L'application sera accessible sur `http://localhost:8080` (ou le port indiqué).
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## 🧪 Tests
 
-**Use GitHub Codespaces**
+- **Frontend** : `npm test` (à la racine) - Lance les tests de composants avec Vitest.
+- **Backend** : `cd backend && npm test` - Lance les tests unitaires et d'intégration avec Jest.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+---
+*Généré pour le projet Gestion Porc*
