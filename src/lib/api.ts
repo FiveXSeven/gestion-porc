@@ -1,4 +1,4 @@
-import { User, Truie, Verrat, Saillie, MiseBas, Portee, Vente, Depense, Alert, LotEngraissement, LotPostSevrage, Pesee, StockAliment } from '@/types';
+import { User, Truie, Saillie, MiseBas, Portee, Vente, Depense, Alert, LotEngraissement, LotPostSevrage, Pesee, StockAliment } from '@/types';
 
 const API_URL = 'http://localhost:3000/api';
 
@@ -29,11 +29,7 @@ export const addTruie = (item: Truie) => fetchJson<Truie>('/truies', { method: '
 export const updateTruie = (id: string, updates: Partial<Truie>) => fetchJson<Truie>(`/truies/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
 export const deleteTruie = (id: string) => fetchJson<void>(`/truies/${id}`, { method: 'DELETE' });
 
-// Verrats
-export const getVerrats = () => fetchJson<Verrat[]>('/verrats');
-export const addVerrat = (item: Verrat) => fetchJson<Verrat>('/verrats', { method: 'POST', body: JSON.stringify(item) });
-export const updateVerrat = (id: string, updates: Partial<Verrat>) => fetchJson<Verrat>(`/verrats/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
-export const deleteVerrat = (id: string) => fetchJson<void>(`/verrats/${id}`, { method: 'DELETE' });
+
 
 // Saillies
 export const getSaillies = () => fetchJson<Saillie[]>('/saillies');

@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import * as api from '@/lib/api';
-import { Saillie, Truie, Verrat } from '@/types';
+import { Saillie, Truie } from '@/types';
 import { Plus, Heart, Calendar, Search, Edit2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, addDays } from 'date-fns';
@@ -29,11 +29,9 @@ const statusColors: Record<Saillie['statut'], string> = {
 const Saillies = () => {
   const [saillies, setSaillies] = useState<Saillie[]>([]);
   const [truies, setTruies] = useState<Truie[]>([]);
-  const [verrats, setVerrats] = useState<Verrat[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
     truieId: '',
-    verratId: '',
     date: '',
     methode: 'naturelle' as Saillie['methode'],
     employe: '',
@@ -47,14 +45,12 @@ const Saillies = () => {
 
   const loadData = async () => {
     try {
-      const [sailliesData, truiesData, verratsData] = await Promise.all([
+      const [sailliesData, truiesData] = await Promise.all([
         api.getSaillies(),
-        api.getTruies(),
-        api.getVerrats()
+        api.getTruies()
       ]);
       setSaillies(sailliesData);
       setTruies(truiesData);
-      setVerrats(verratsData);
     } catch (error) {
       console.error(error);
       toast.error('Erreur lors du chargement des données');
@@ -64,7 +60,6 @@ const Saillies = () => {
   const resetForm = () => {
     setFormData({
       truieId: '',
-      verratId: '',
       date: '',
       methode: 'naturelle',
       employe: '',
@@ -76,7 +71,7 @@ const Saillies = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.truieId || !formData.verratId || !formData.date) {
+    if (!formData.truieId || !formData.date) {
       toast.error('Veuillez remplir tous les champs obligatoires');
       return;
     }
@@ -120,7 +115,6 @@ const Saillies = () => {
     setEditingSaillie(saillie);
     setFormData({
       truieId: saillie.truieId,
-      verratId: saillie.verratId,
       date: saillie.date.split('T')[0],
       methode: saillie.methode,
       employe: saillie.employe,
@@ -150,7 +144,6 @@ const Saillies = () => {
   });
 
   const availableTruies = truies.filter(t => t.statut === 'active');
-  const activeVerrats = verrats.filter(v => v.statut === 'actif');
 
   return (
     <MainLayout>
@@ -191,24 +184,6 @@ const Saillies = () => {
                       {availableTruies.map(truie => (
                         <SelectItem key={truie.id} value={truie.id}>
                           {truie.identification}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="verratId">Verrat *</Label>
-                  <Select
-                    value={formData.verratId}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, verratId: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sélectionner un verrat" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {activeVerrats.map(verrat => (
-                        <SelectItem key={verrat.id} value={verrat.id}>
-                          {verrat.identification}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -294,7 +269,6 @@ const Saillies = () => {
           ) : (
             filteredSaillies.map((saillie, index) => {
               const truie = truies.find(t => t.id === saillie.truieId);
-              const verrat = verrats.find(v => v.id === saillie.verratId);
 
               return (
                 <div
@@ -309,7 +283,7 @@ const Saillies = () => {
                       </div>
                       <div>
                         <p className="font-semibold text-foreground">{truie?.identification}</p>
-                        <p className="text-sm text-muted-foreground">× {verrat?.identification}</p>
+                        <p className="text-sm text-muted-foreground capitalize">{saillie.methode}</p>
                       </div>
                     </div>
                     <span className={cn(

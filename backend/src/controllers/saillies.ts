@@ -5,8 +5,7 @@ export const getAll = async (req: Request, res: Response) => {
     try {
         const saillies = await prisma.saillie.findMany({
             include: {
-                truie: true,
-                verrat: true
+                truie: true
             }
         });
         res.json(saillies);
@@ -21,7 +20,6 @@ export const create = async (req: Request, res: Response) => {
         const newSaillie = await prisma.saillie.create({
             data: {
                 truieId: data.truieId,
-                verratId: data.verratId,
                 date: new Date(data.date),
                 methode: data.methode,
                 employe: data.employe,

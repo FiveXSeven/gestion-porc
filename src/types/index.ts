@@ -14,19 +14,11 @@ export interface Truie {
   notes: string;
 }
 
-export interface Verrat {
-  id: string;
-  identification: string;
-  dateEntree: string;
-  dateNaissance: string;
-  poids: number;
-  statut: 'actif' | 'reforme';
-}
+
 
 export interface Saillie {
   id: string;
   truieId: string;
-  verratId: string;
   date: string;
   methode: 'naturelle' | 'insemination';
   employe: string;
@@ -58,7 +50,7 @@ export interface Portee {
 export interface Vente {
   id: string;
   date: string;
-  typeAnimal: 'porcelet' | 'porc_engraissement' | 'truie_reforme' | 'verrat_reforme';
+  typeAnimal: 'porcelet' | 'porc_engraissement' | 'truie_reforme';
   quantite: number;
   poidsTotal: number;
   prixUnitaire: number;

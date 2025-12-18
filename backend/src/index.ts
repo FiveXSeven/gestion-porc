@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import truiesRoutes from './routes/truies';
-import verratsRoutes from './routes/verrats';
 import sailliesRoutes from './routes/saillies';
 import misesBasRoutes from './routes/mises-bas';
 import porteesRoutes from './routes/portees';
@@ -24,7 +23,6 @@ app.use(express.json());
 
 // Routes
 app.use('/api/truies', truiesRoutes);
-app.use('/api/verrats', verratsRoutes);
 app.use('/api/saillies', sailliesRoutes);
 app.use('/api/mises-bas', misesBasRoutes);
 app.use('/api/portees', porteesRoutes);

@@ -16,7 +16,6 @@ const typeLabels: Record<Vente['typeAnimal'], string> = {
   porcelet: 'Porcelet',
   porc_engraissement: 'Porc d\'engraissement',
   truie_reforme: 'Truie réformée',
-  verrat_reforme: 'Verrat réformé',
 };
 
 const Ventes = () => {

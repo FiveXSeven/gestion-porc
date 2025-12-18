@@ -23,25 +23,12 @@ model Truie {
   updatedAt      DateTime @updatedAt
 }
 
-model Verrat {
-  id             String   @id @default(cuid())
-  identification String   @unique
-  dateEntree     DateTime
-  dateNaissance  DateTime
-  poids          Float
-  statut         String   // 'actif' | 'reforme'
-  
-  saillies       Saillie[]
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-}
+
 
 model Saillie {
   id                 String   @id @default(cuid())
   truieId            String
   truie              Truie    @relation(fields: [truieId], references: [id])
-  verratId           String
-  verrat             Verrat   @relation(fields: [verratId], references: [id])
   date               DateTime
   methode            String   // 'naturelle' | 'insemination'
   employe            String
