@@ -47,7 +47,9 @@ const Alertes = () => {
   const loadAlerts = async () => {
     try {
       const data = await api.getAlerts();
-      setAlerts(data);
+      // Sort by most recent first
+      const sortedData = data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setAlerts(sortedData);
     } catch (error) {
       console.error(error);
       toast.error('Erreur lors du chargement des alertes');
@@ -88,6 +90,19 @@ const Alertes = () => {
     }
   };
 
+  const handleDeleteAll = async () => {
+    if (confirm('Supprimer toutes les alertes ?')) {
+      try {
+        await Promise.all(alerts.map(a => api.deleteAlert(a.id)));
+        loadAlerts();
+        toast.success('Toutes les alertes ont été supprimées');
+      } catch (error) {
+        console.error(error);
+        toast.error('Erreur lors de la suppression');
+      }
+    }
+  };
+
   const filteredAlerts = alerts.filter(alert => {
     if (filter === 'unread') return !alert.read;
     if (filter === 'read') return alert.read;
@@ -111,6 +126,12 @@ const Alertes = () => {
             <Button variant="outline" onClick={handleMarkAllRead} className="gap-2">
               <Check className="h-4 w-4" />
               Tout marquer comme lu
+            </Button>
+          )}
+          {alerts.length > 0 && (
+            <Button variant="destructive" onClick={handleDeleteAll} className="gap-2">
+              <Trash2 className="h-4 w-4" />
+              Tout effacer
             </Button>
           )}
         </div>

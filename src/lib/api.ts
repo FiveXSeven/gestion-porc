@@ -1,4 +1,4 @@
-import { User, Truie, Saillie, MiseBas, Portee, Vente, Depense, Alert, LotEngraissement, LotPostSevrage, Pesee, StockAliment } from '@/types';
+import { User, Truie, Saillie, MiseBas, Portee, Vente, Depense, Alert, LotEngraissement, LotPostSevrage, Pesee, StockAliment, Mortalite, ConsommationAliment, Vaccination, Traitement } from '@/types';
 
 const API_URL = 'http://localhost:3000/api';
 
@@ -111,3 +111,24 @@ export const initializeDemoData = async () => {
     console.log("Demo data initialization should be handled by backend seeding.");
 };
 
+// Mortalites
+export const getMortalites = () => fetchJson<Mortalite[]>('/mortalites');
+export const addMortalite = (item: Mortalite) => fetchJson<Mortalite>('/mortalites', { method: 'POST', body: JSON.stringify(item) });
+export const deleteMortalite = (id: string) => fetchJson<void>(`/mortalites/${id}`, { method: 'DELETE' });
+export const getMortalitesForLot = (lotType: 'engraissement' | 'post-sevrage', lotId: string) => 
+    fetchJson<Mortalite[]>(`/mortalites/${lotType}/${lotId}`);
+
+// Consommations
+export const getConsommations = () => fetchJson<ConsommationAliment[]>('/consommations');
+export const addConsommation = (item: ConsommationAliment) => fetchJson<ConsommationAliment>('/consommations', { method: 'POST', body: JSON.stringify(item) });
+export const deleteConsommation = (id: string) => fetchJson<void>(`/consommations/${id}`, { method: 'DELETE' });
+
+// Vaccinations
+export const getVaccinations = () => fetchJson<Vaccination[]>('/sante/vaccinations');
+export const addVaccination = (item: Vaccination) => fetchJson<Vaccination>('/sante/vaccinations', { method: 'POST', body: JSON.stringify(item) });
+export const deleteVaccination = (id: string) => fetchJson<void>(`/sante/vaccinations/${id}`, { method: 'DELETE' });
+
+// Traitements
+export const getTraitements = () => fetchJson<Traitement[]>('/sante/traitements');
+export const addTraitement = (item: Traitement) => fetchJson<Traitement>('/sante/traitements', { method: 'POST', body: JSON.stringify(item) });
+export const deleteTraitement = (id: string) => fetchJson<void>(`/sante/traitements/${id}`, { method: 'DELETE' });

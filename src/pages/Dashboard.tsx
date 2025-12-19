@@ -120,6 +120,43 @@ const Dashboard = () => {
     ? lotsEnCours.reduce((sum, lot) => sum + calculateGMQ(lot), 0) / lotsEnCours.length
     : 0;
 
+  // NEW KPIs
+  
+  // 1. Fertility Rate: Confirmed sailies / Total saillies
+  const totalSaillies = saillies.length;
+  const sailliesConfirmees = saillies.filter(s => s.statut === 'confirmee').length;
+  const tauxFertilite = totalSaillies > 0 
+    ? Math.round((sailliesConfirmees / totalSaillies) * 100) 
+    : 0;
+
+  // 2. Average live births per litter
+  const totalNesVivants = misesBas.reduce((sum, mb) => sum + mb.nesVivants, 0);
+  const moyenneNesVivants = misesBas.length > 0 
+    ? Math.round((totalNesVivants / misesBas.length) * 10) / 10
+    : 0;
+
+  // 3. Average mortality rate (stillbirths / total births)
+  const totalMortNes = misesBas.reduce((sum, mb) => sum + mb.mortNes, 0);
+  const totalNaissances = totalNesVivants + totalMortNes;
+  const tauxMortaliteNaissance = totalNaissances > 0
+    ? Math.round((totalMortNes / totalNaissances) * 1000) / 10
+    : 0;
+
+  // 4. Average fattening duration (for completed lots)
+  const lotsTerminesAvecDuree = lotsEngTermines.filter(lot => {
+    const lotPesees = getPeseesForLot(lot.id);
+    return lotPesees.length >= 2;
+  });
+  const dureeMoyenneEngraissement = lotsTerminesAvecDuree.length > 0
+    ? Math.round(lotsTerminesAvecDuree.reduce((sum, lot) => {
+        const lotPesees = getPeseesForLot(lot.id);
+        if (lotPesees.length >= 2) {
+          return sum + differenceInDays(new Date(lotPesees[lotPesees.length - 1].date), new Date(lot.dateEntree));
+        }
+        return sum;
+      }, 0) / lotsTerminesAvecDuree.length)
+    : 0;
+
   // Filter out saillies that already have a mise bas (only show those without a birth yet)
   const sailliesWithMiseBas = new Set(misesBas.map(m => m.saillieId));
   const prochainsMisesBas = saillies
@@ -185,6 +222,30 @@ const Dashboard = () => {
             icon={benefice >= 0 ? TrendingUp : TrendingDown}
             variant={benefice >= 0 ? 'success' : 'warning'}
           />
+        </div>
+
+        {/* KPIs Row */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 animate-slide-up" style={{ animationDelay: '0.1s' }}>
+          <div className="bg-card rounded-2xl border border-border p-4 shadow-card">
+            <p className="text-sm text-muted-foreground mb-1">Taux de fertilité</p>
+            <p className="text-2xl font-display font-bold text-primary">{tauxFertilite}%</p>
+            <p className="text-xs text-muted-foreground mt-1">{sailliesConfirmees}/{totalSaillies} confirmées</p>
+          </div>
+          <div className="bg-card rounded-2xl border border-border p-4 shadow-card">
+            <p className="text-sm text-muted-foreground mb-1">Nés vivants/portée</p>
+            <p className="text-2xl font-display font-bold text-success">{moyenneNesVivants}</p>
+            <p className="text-xs text-muted-foreground mt-1">Moyenne sur {misesBas.length} mises bas</p>
+          </div>
+          <div className="bg-card rounded-2xl border border-border p-4 shadow-card">
+            <p className="text-sm text-muted-foreground mb-1">Mortalité naissance</p>
+            <p className="text-2xl font-display font-bold text-destructive">{tauxMortaliteNaissance}%</p>
+            <p className="text-xs text-muted-foreground mt-1">{totalMortNes} mort-nés / {totalNaissances} total</p>
+          </div>
+          <div className="bg-card rounded-2xl border border-border p-4 shadow-card">
+            <p className="text-sm text-muted-foreground mb-1">Durée engraissement</p>
+            <p className="text-2xl font-display font-bold text-info">{dureeMoyenneEngraissement}j</p>
+            <p className="text-xs text-muted-foreground mt-1">Moyenne sur {lotsEngTermines.length} lots</p>
+          </div>
         </div>
 
         {/* Main content */}

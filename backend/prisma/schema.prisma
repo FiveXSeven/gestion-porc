@@ -123,6 +123,8 @@ model LotEngraissement {
   notes          String   @default("")
   
   pesees         Pesee[]
+  mortalites     Mortalite[]
+  consommations  ConsommationAliment[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
@@ -147,6 +149,7 @@ model StockAliment {
   quantite      Float    // Nombre de sacs
   poidsSac      Float    // 25 or 40
   dateMiseAJour DateTime
+  consommations ConsommationAliment[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -167,6 +170,61 @@ model LotPostSevrage {
   notes          String   @default("")
   
   pesees         Pesee[]
+  mortalites     Mortalite[]
+  consommations  ConsommationAliment[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+}
+
+model Mortalite {
+  id                 String   @id @default(cuid())
+  date               DateTime
+  nombre             Int
+  cause              String   // 'maladie' | 'accident' | 'faiblesse' | 'autre'
+  notes              String   @default("")
+  lotEngraissementId String?
+  lotEngraissement   LotEngraissement? @relation(fields: [lotEngraissementId], references: [id])
+  lotPostSevrageId   String?
+  lotPostSevrage     LotPostSevrage?   @relation(fields: [lotPostSevrageId], references: [id])
+  createdAt          DateTime @default(now())
+}
+
+model ConsommationAliment {
+  id                 String   @id @default(cuid())
+  date               DateTime
+  quantiteSacs       Float
+  stockAlimentId     String
+  stockAliment       StockAliment @relation(fields: [stockAlimentId], references: [id])
+  lotEngraissementId String?
+  lotEngraissement   LotEngraissement? @relation(fields: [lotEngraissementId], references: [id])
+  lotPostSevrageId   String?
+  lotPostSevrage     LotPostSevrage?   @relation(fields: [lotPostSevrageId], references: [id])
+  notes              String   @default("")
+  createdAt          DateTime @default(now())
+}
+
+model Vaccination {
+  id          String   @id @default(cuid())
+  date        DateTime
+  nom         String
+  type        String   // 'obligatoire' | 'preventif' | 'curatif'
+  lotType     String   // 'post-sevrage' | 'engraissement' | 'truie'
+  lotId       String?
+  truieId     String?
+  dateRappel  DateTime?
+  notes       String   @default("")
+  createdAt   DateTime @default(now())
+}
+
+model Traitement {
+  id          String   @id @default(cuid())
+  date        DateTime
+  nom         String
+  medicament  String
+  dureeJours  Int
+  lotType     String   // 'post-sevrage' | 'engraissement' | 'truie'
+  lotId       String?
+  truieId     String?
+  notes       String   @default("")
+  createdAt   DateTime @default(now())
 }

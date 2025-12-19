@@ -6,8 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import * as api from '@/lib/api';
-import { LotPostSevrage, Pesee, LotEngraissement } from '@/types';
-import { Plus, Scale, TrendingUp, Calendar, Target, Eye, Search, Edit2, Trash2, ArrowRight, CheckCircle } from 'lucide-react';
+import { LotPostSevrage, Pesee, LotEngraissement, Mortalite } from '@/types';
+import { Plus, Scale, TrendingUp, Calendar, Target, Eye, Search, Edit2, Trash2, ArrowRight, CheckCircle, Skull } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -68,6 +68,16 @@ const PostSevrage = () => {
     poidsTotal: '',
     nombreTransferes: '',
     createLot: true,
+  });
+
+  // Mortality state
+  const [isMortaliteDialogOpen, setIsMortaliteDialogOpen] = useState(false);
+  const [mortaliteLot, setMortaliteLot] = useState<LotPostSevrage | null>(null);
+  const [mortaliteFormData, setMortaliteFormData] = useState({
+    date: new Date().toISOString().split('T')[0],
+    nombre: '',
+    cause: 'maladie' as Mortalite['cause'],
+    notes: '',
   });
 
   useEffect(() => {
@@ -358,6 +368,50 @@ const PostSevrage = () => {
     } catch (error) {
       console.error(error);
       toast.error('Erreur lors du transfert');
+    }
+  };
+
+  // Mortality handlers
+  const openMortaliteDialog = (lot: LotPostSevrage) => {
+    setMortaliteLot(lot);
+    setMortaliteFormData({
+      date: new Date().toISOString().split('T')[0],
+      nombre: '',
+      cause: 'maladie',
+      notes: '',
+    });
+    setIsMortaliteDialogOpen(true);
+  };
+
+  const handleMortaliteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mortaliteLot || !mortaliteFormData.nombre) {
+      toast.error('Veuillez saisir le nombre');
+      return;
+    }
+
+    const nombre = parseInt(mortaliteFormData.nombre);
+    if (nombre > mortaliteLot.nombreActuel) {
+      toast.error('Le nombre ne peut pas dépasser le nombre actuel');
+      return;
+    }
+
+    try {
+      await api.addMortalite({
+        id: '',
+        date: mortaliteFormData.date,
+        nombre,
+        cause: mortaliteFormData.cause,
+        notes: mortaliteFormData.notes,
+        lotPostSevrageId: mortaliteLot.id,
+      });
+
+      toast.success('Mortalité enregistrée');
+      setIsMortaliteDialogOpen(false);
+      loadData();
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de l\'enregistrement');
     }
   };
 
@@ -685,6 +739,78 @@ const PostSevrage = () => {
           </DialogContent>
         </Dialog>
 
+        {/* Mortalite Dialog */}
+        <Dialog open={isMortaliteDialogOpen} onOpenChange={setIsMortaliteDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="font-display text-destructive">
+                Enregistrer une mortalité
+              </DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleMortaliteSubmit} className="space-y-4 mt-4">
+              <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+                Lot: {mortaliteLot?.identification} - Animaux actuels: {mortaliteLot?.nombreActuel}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="mortaliteDate">Date *</Label>
+                  <Input
+                    id="mortaliteDate"
+                    type="date"
+                    value={mortaliteFormData.date}
+                    onChange={(e) => setMortaliteFormData(prev => ({ ...prev, date: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="mortaliteNombre">Nombre décédés *</Label>
+                  <Input
+                    id="mortaliteNombre"
+                    type="number"
+                    min="1"
+                    max={mortaliteLot?.nombreActuel || 1}
+                    value={mortaliteFormData.nombre}
+                    onChange={(e) => setMortaliteFormData(prev => ({ ...prev, nombre: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="mortaliteCause">Cause</Label>
+                <Select
+                  value={mortaliteFormData.cause}
+                  onValueChange={(value) => setMortaliteFormData(prev => ({ ...prev, cause: value as Mortalite['cause'] }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="maladie">Maladie</SelectItem>
+                    <SelectItem value="accident">Accident</SelectItem>
+                    <SelectItem value="faiblesse">Faiblesse</SelectItem>
+                    <SelectItem value="autre">Autre</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="mortaliteNotes">Notes</Label>
+                <Input
+                  id="mortaliteNotes"
+                  placeholder="Notes sur l'incident..."
+                  value={mortaliteFormData.notes}
+                  onChange={(e) => setMortaliteFormData(prev => ({ ...prev, notes: e.target.value }))}
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <Button type="button" variant="outline" onClick={() => setIsMortaliteDialogOpen(false)} className="flex-1">
+                  Annuler
+                </Button>
+                <Button type="submit" variant="destructive" className="flex-1">
+                  Enregistrer
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+
         {/* Detail Dialog */}
         <Dialog open={!!detailLot} onOpenChange={(open) => !open && setDetailLot(null)}>
           <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -915,6 +1041,17 @@ const PostSevrage = () => {
                       </Button>
                     )}
                   </div>
+                  {lot.statut === 'en_cours' && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="w-full mt-2 gap-1"
+                      onClick={() => openMortaliteDialog(lot)}
+                    >
+                      <Skull className="h-4 w-4" />
+                      Mortalité
+                    </Button>
+                  )}
                   
                   {lot.statut === 'en_cours' && daysToTarget !== null && daysToTarget <= 0 && (
                     <div className="flex gap-2 mt-2">

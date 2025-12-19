@@ -125,3 +125,48 @@ export interface StockAliment {
   poidsSac: 25 | 40 | number; // 25kg ou 40kg, allow number for flexibility but UI will enforce
   dateMiseAJour: string;
 }
+
+export interface Mortalite {
+  id: string;
+  date: string;
+  nombre: number;
+  cause: 'maladie' | 'accident' | 'faiblesse' | 'autre';
+  notes: string;
+  lotEngraissementId?: string;
+  lotPostSevrageId?: string;
+}
+
+export interface ConsommationAliment {
+  id: string;
+  date: string;
+  quantiteSacs: number;
+  stockAlimentId: string;
+  lotEngraissementId?: string;
+  lotPostSevrageId?: string;
+  notes: string;
+}
+
+export interface Vaccination {
+  id: string;
+  date: string;
+  nom: string;
+  type: 'obligatoire' | 'preventif' | 'curatif';
+  lotType: 'post-sevrage' | 'engraissement' | 'truie';
+  lotId?: string;
+  truieId?: string;
+  dateRappel?: string;
+  notes: string;
+}
+
+export interface Traitement {
+  id: string;
+  date: string;
+  nom: string;
+  medicament: string;
+  dureeJours: number;
+  lotType: 'post-sevrage' | 'engraissement' | 'truie';
+  lotId?: string;
+  truieId?: string;
+  notes: string;
+}
+

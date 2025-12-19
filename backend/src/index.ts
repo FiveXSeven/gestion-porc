@@ -12,6 +12,9 @@ import lotsEngraissementRoutes from './routes/lots-engraissement';
 import lotsPostSevrageRoutes from './routes/lots-post-sevrage';
 import peseesRoutes from './routes/pesees';
 import stockAlimentsRoutes from './routes/stock-aliments';
+import mortalitesRoutes from './routes/mortalites';
+import consommationsRoutes from './routes/consommations';
+import santeRoutes from './routes/sante';
 
 dotenv.config();
 
@@ -33,6 +36,9 @@ app.use('/api/lots-engraissement', lotsEngraissementRoutes);
 app.use('/api/lots-post-sevrage', lotsPostSevrageRoutes);
 app.use('/api/pesees', peseesRoutes);
 app.use('/api/stock-aliments', stockAlimentsRoutes);
+app.use('/api/mortalites', mortalitesRoutes);
+app.use('/api/consommations', consommationsRoutes);
+app.use('/api/sante', santeRoutes);
 
 app.get('/', (req, res) => {
     res.send('Gestion Porc API is running');
