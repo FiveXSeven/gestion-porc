@@ -16,7 +16,8 @@ import {
   Scale,
   Layers,
   Package,
-  HeartPulse
+  HeartPulse,
+  FileText
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -34,6 +35,7 @@ const navItems = [
   { to: '/stock-aliment', icon: Package, label: 'Stock Aliment' },
   { to: '/ventes', icon: ShoppingCart, label: 'Ventes' },
   { to: '/depenses', icon: Receipt, label: 'Dépenses' },
+  { to: '/rapports', icon: FileText, label: 'Rapports' },
   { to: '/alertes', icon: Bell, label: 'Alertes' },
 ];
 
