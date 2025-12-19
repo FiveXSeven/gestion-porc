@@ -63,3 +63,57 @@ export const remove = async (req: Request, res: Response) => {
         res.status(500).json({ error: 'Error deleting saillie' });
     }
 };
+
+export const confirm = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const updatedSaillie = await prisma.saillie.update({
+            where: { id },
+            data: {
+                statut: 'confirmee',
+            },
+        });
+        
+        // Also update truie status to gestante if not already
+        await prisma.truie.update({
+            where: { id: updatedSaillie.truieId },
+            data: { statut: 'gestante' },
+        });
+        
+        res.json(updatedSaillie);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Error confirming saillie' });
+    }
+};
+
+export const fail = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const saillie = await prisma.saillie.findUnique({
+            where: { id },
+        });
+        
+        if (!saillie) {
+            return res.status(404).json({ error: 'Saillie not found' });
+        }
+        
+        const updatedSaillie = await prisma.saillie.update({
+            where: { id },
+            data: {
+                statut: 'echouee',
+            },
+        });
+        
+        // Reset truie status back to active
+        await prisma.truie.update({
+            where: { id: saillie.truieId },
+            data: { statut: 'active' },
+        });
+        
+        res.json(updatedSaillie);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Error marking saillie as failed' });
+    }
+};

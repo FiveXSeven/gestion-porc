@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import * as api from '@/lib/api';
 import { Alert } from '@/types';
-import { Bell, Baby, Calendar, ShoppingCart, HeartPulse, Check, Trash2 } from 'lucide-react';
+import { Bell, Baby, Calendar, ShoppingCart, HeartPulse, Check, Trash2, Scale, Target } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -14,6 +14,8 @@ const alertIcons = {
   sevrage: Calendar,
   vente: ShoppingCart,
   sante: HeartPulse,
+  post_sevrage_pret: Scale,
+  engraissement_pret: Target,
 };
 
 const alertColors = {
@@ -21,6 +23,8 @@ const alertColors = {
   sevrage: 'bg-info/10 text-info border-info/20',
   vente: 'bg-success/10 text-success border-success/20',
   sante: 'bg-destructive/10 text-destructive border-destructive/20',
+  post_sevrage_pret: 'bg-success/10 text-success border-success/20',
+  engraissement_pret: 'bg-warning/10 text-warning border-warning/20',
 };
 
 const alertLabels = {
@@ -28,6 +32,8 @@ const alertLabels = {
   sevrage: 'Sevrage',
   vente: 'Vente',
   sante: 'Santé',
+  post_sevrage_pret: 'PS Prêt',
+  engraissement_pret: 'Eng. Prêt',
 };
 
 const Alertes = () => {

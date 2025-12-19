@@ -161,10 +161,14 @@ const Portees = () => {
   };
 
   const openSevrageDialog = (portee: Portee) => {
+    const miseBas = misesBas.find(m => m.id === portee.miseBasId);
+    // Pre-fill poidsTotal: nombreActuel × poidsMoyen
+    const estimatedWeight = miseBas ? (portee.nombreActuel * miseBas.poidsMoyen).toFixed(1) : '';
+    
     setSevragePortee(portee);
     setSevrageFormData({
       date: new Date().toISOString().split('T')[0],
-      poidsTotal: '',
+      poidsTotal: estimatedWeight,
       nombreSevles: portee.nombreActuel.toString(),
       createLot: true,
     });

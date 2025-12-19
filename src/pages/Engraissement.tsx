@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import * as api from '@/lib/api';
 import { LotEngraissement, Pesee } from '@/types';
-import { Plus, Scale, TrendingUp, Calendar, Target, Eye, Search, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Scale, TrendingUp, Calendar, Target, Eye, Search, Edit2, Trash2, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -18,12 +18,16 @@ const statusLabels: Record<LotEngraissement['statut'], string> = {
   en_cours: 'En cours',
   vendu: 'Vendu',
   partiel: 'Vente partielle',
+  pret: 'Prêt',
+  termine: 'Terminé',
 };
 
 const statusColors: Record<LotEngraissement['statut'], string> = {
   en_cours: 'bg-info/10 text-info border-info/20',
   vendu: 'bg-success/10 text-success border-success/20',
   partiel: 'bg-warning/10 text-warning border-warning/20',
+  pret: 'bg-green-500/10 text-green-500 border-green-500/20',
+  termine: 'bg-emerald-600/10 text-emerald-600 border-emerald-600/20',
 };
 
 const Engraissement = () => {
@@ -183,6 +187,19 @@ const Engraissement = () => {
     }
   };
 
+  const handleMarkTermine = async (lot: LotEngraissement) => {
+    if (confirm(`Confirmer que le lot ${lot.identification} est terminé ?`)) {
+      try {
+        await api.updateLotEngraissement(lot.id, { statut: 'termine' });
+        loadData();
+        toast.success('Lot marqué comme terminé');
+      } catch (error) {
+        console.error(error);
+        toast.error('Erreur lors de la mise à jour');
+      }
+    }
+  };
+
   const filteredLots = lots.filter(lot =>
     lot.identification.toLowerCase().includes(search.toLowerCase())
   );
@@ -256,13 +273,16 @@ const Engraissement = () => {
     if (lotPesees.length === 0) return null;
 
     const lastPesee = lotPesees[lotPesees.length - 1];
+    
+    // If current weight >= target, return 0 (target reached!)
+    if (lastPesee.poidsMoyen >= lot.poidsCible) return 0;
+    
     const gmq = calculateGMQ(lot);
 
+    // If no GMQ available, we can't estimate days but we know target not reached
     if (!gmq || gmq <= 0) return null;
 
     const remainingWeight = lot.poidsCible - lastPesee.poidsMoyen;
-    if (remainingWeight <= 0) return 0;
-
     return Math.ceil(remainingWeight / gmq);
   };
 
@@ -682,12 +702,14 @@ const Engraissement = () => {
                     </div>
                   )}
 
-                  {daysToTarget === 0 && (
+                  {daysToTarget === 0 && lot.statut === 'en_cours' && (
                     <div className="flex items-center gap-2 text-success mb-4 p-3 rounded-xl bg-success/10">
                       <Target className="h-4 w-4" />
                       <span className="text-sm font-medium">Poids cible atteint !</span>
                     </div>
                   )}
+
+
 
                   <div className="flex gap-2">
                     <Button
@@ -699,15 +721,32 @@ const Engraissement = () => {
                       <Eye className="h-4 w-4" />
                       Détails
                     </Button>
-                    <Button
-                      size="sm"
-                      className="flex-1 gap-1"
-                      onClick={() => openPeseeDialog(lot.id)}
-                    >
-                      <Scale className="h-4 w-4" />
-                      Pesée
-                    </Button>
+                    {lot.statut === 'en_cours' && (
+                      <Button
+                        size="sm"
+                        className="flex-1 gap-1"
+                        onClick={() => openPeseeDialog(lot.id)}
+                      >
+                        <Scale className="h-4 w-4" />
+                        Pesée
+                      </Button>
+                    )}
                   </div>
+
+                  {/* Terminer button when target weight is reached */}
+                  {lot.statut === 'en_cours' && daysToTarget !== null && daysToTarget <= 0 && (
+                    <Button
+                      variant="success"
+                      size="sm"
+                      className="w-full mt-2 gap-1"
+                      onClick={() => handleMarkTermine(lot)}
+                    >
+                      <CheckCircle className="h-4 w-4" />
+                      Confirmer Terminé
+                    </Button>
+                  )}
+
+
                 </div>
               );
             })

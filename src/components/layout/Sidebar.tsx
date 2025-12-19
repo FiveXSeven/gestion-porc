@@ -20,6 +20,7 @@ import {
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Tableau de bord' },
@@ -37,6 +38,7 @@ const navItems = [
 export const Sidebar = () => {
   const { user, logout } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+  const { unreadCount } = useAlertNotifications();
 
   return (
     <>
@@ -94,6 +96,12 @@ export const Sidebar = () => {
             >
               <item.icon className="h-5 w-5" />
               {item.label}
+              {/* Show notification badge for Alertes */}
+              {item.to === '/alertes' && unreadCount > 0 && (
+                <span className="ml-auto px-2 py-0.5 rounded-full bg-destructive text-destructive-foreground text-xs font-bold min-w-[20px] text-center">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>

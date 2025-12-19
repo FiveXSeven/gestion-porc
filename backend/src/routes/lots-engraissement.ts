@@ -7,5 +7,7 @@ router.get('/', lotsEngraissementController.getAll);
 router.post('/', lotsEngraissementController.create);
 router.put('/:id', lotsEngraissementController.update);
 router.delete('/:id', lotsEngraissementController.remove);
+router.post('/:id/mark-ready', lotsEngraissementController.markReady);
 
 export default router;
+

@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import * as api from '@/lib/api';
 import { LotPostSevrage, Pesee, LotEngraissement } from '@/types';
-import { Plus, Scale, TrendingUp, Calendar, Target, Eye, Search, Edit2, Trash2, ArrowRight } from 'lucide-react';
+import { Plus, Scale, TrendingUp, Calendar, Target, Eye, Search, Edit2, Trash2, ArrowRight, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -20,6 +20,8 @@ const statusLabels: Record<LotPostSevrage['statut'], string> = {
   vendu: 'Vendu',
   partiel: 'Vente partielle',
   transfere: 'Transféré',
+  pret: 'Prêt',
+  termine: 'Terminé',
 };
 
 const statusColors: Record<LotPostSevrage['statut'], string> = {
@@ -27,6 +29,8 @@ const statusColors: Record<LotPostSevrage['statut'], string> = {
   vendu: 'bg-success/10 text-success border-success/20',
   partiel: 'bg-warning/10 text-warning border-warning/20',
   transfere: 'bg-purple-500/10 text-purple-500 border-purple-500/20',
+  pret: 'bg-green-500/10 text-green-500 border-green-500/20',
+  termine: 'bg-emerald-600/10 text-emerald-600 border-emerald-600/20',
 };
 
 const PostSevrage = () => {
@@ -195,6 +199,19 @@ const PostSevrage = () => {
     }
   };
 
+  const handleMarkTermine = async (lot: LotPostSevrage) => {
+    if (confirm(`Marquer le lot ${lot.identification} comme terminé (sans transfert) ?`)) {
+      try {
+        await api.updateLotPostSevrage(lot.id, { statut: 'termine' });
+        loadData();
+        toast.success('Lot marqué comme terminé');
+      } catch (error) {
+        console.error(error);
+        toast.error('Erreur lors de la mise à jour');
+      }
+    }
+  };
+
   const filteredLots = lots.filter(lot =>
     lot.identification.toLowerCase().includes(search.toLowerCase())
   );
@@ -247,10 +264,14 @@ const PostSevrage = () => {
   };
 
   const openTransferDialog = (lot: LotPostSevrage) => {
+    // Pre-fill poidsTotal: nombreActuel × lastAverageWeight
+    const lastWeight = getLastWeight(lot.id) || lot.poidsEntree;
+    const estimatedTotal = (lot.nombreActuel * lastWeight).toFixed(1);
+    
     setTransferLot(lot);
     setTransferFormData({
       date: new Date().toISOString().split('T')[0],
-      poidsTotal: '', // User needs to weigh them before transfer
+      poidsTotal: estimatedTotal,
       nombreTransferes: lot.nombreActuel.toString(),
       createLot: true,
     });
@@ -341,13 +362,16 @@ const PostSevrage = () => {
     if (lotPesees.length === 0) return null;
 
     const lastPesee = lotPesees[lotPesees.length - 1];
+    
+    // If current weight >= target, return 0 (target reached!)
+    if (lastPesee.poidsMoyen >= lot.poidsCible) return 0;
+    
     const gmq = calculateGMQ(lot);
 
+    // If no GMQ available, we can't estimate days but we know target not reached
     if (!gmq || gmq <= 0) return null;
 
     const remainingWeight = lot.poidsCible - lastPesee.poidsMoyen;
-    if (remainingWeight <= 0) return 0;
-
     return Math.ceil(remainingWeight / gmq);
   };
 
@@ -832,12 +856,14 @@ const PostSevrage = () => {
                     </div>
                   )}
 
-                  {daysToTarget === 0 && (
+                  {daysToTarget === 0 && lot.statut === 'en_cours' && (
                     <div className="flex items-center gap-2 text-success mb-4 p-3 rounded-xl bg-success/10">
                       <Target className="h-4 w-4" />
                       <span className="text-sm font-medium">Poids cible atteint !</span>
                     </div>
                   )}
+
+
 
                   <div className="flex gap-2">
                     <Button
@@ -849,15 +875,40 @@ const PostSevrage = () => {
                       <Eye className="h-4 w-4" />
                       Détails
                     </Button>
-                    <Button
-                      size="sm"
-                      className="flex-1 gap-1"
-                      onClick={() => openPeseeDialog(lot.id)}
-                    >
-                      <Scale className="h-4 w-4" />
-                      Pesée
-                    </Button>
+                    {lot.statut === 'en_cours' && (
+                      <Button
+                        size="sm"
+                        className="flex-1 gap-1"
+                        onClick={() => openPeseeDialog(lot.id)}
+                      >
+                        <Scale className="h-4 w-4" />
+                        Pesée
+                      </Button>
+                    )}
                   </div>
+                  
+                  {lot.statut === 'en_cours' && daysToTarget !== null && daysToTarget <= 0 && (
+                    <div className="flex gap-2 mt-2">
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="flex-1 gap-1"
+                        onClick={() => openTransferDialog(lot)}
+                      >
+                        <ArrowRight className="h-4 w-4" />
+                        Transférer
+                      </Button>
+                      <Button
+                        variant="success"
+                        size="sm"
+                        className="flex-1 gap-1"
+                        onClick={() => handleMarkTermine(lot)}
+                      >
+                        <CheckCircle className="h-4 w-4" />
+                        Terminer
+                      </Button>
+                    </div>
+                  )}
                 </div>
               );
             })

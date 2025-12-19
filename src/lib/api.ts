@@ -36,6 +36,8 @@ export const getSaillies = () => fetchJson<Saillie[]>('/saillies');
 export const addSaillie = (item: Saillie) => fetchJson<Saillie>('/saillies', { method: 'POST', body: JSON.stringify(item) });
 export const updateSaillie = (id: string, updates: Partial<Saillie>) => fetchJson<Saillie>(`/saillies/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
 export const deleteSaillie = (id: string) => fetchJson<void>(`/saillies/${id}`, { method: 'DELETE' });
+export const confirmSaillie = (id: string) => fetchJson<Saillie>(`/saillies/${id}/confirm`, { method: 'POST' });
+export const failSaillie = (id: string) => fetchJson<Saillie>(`/saillies/${id}/fail`, { method: 'POST' });
 
 // Mises bas
 export const getMisesBas = () => fetchJson<MiseBas[]>('/mises-bas');
@@ -67,6 +69,7 @@ export const addAlert = (item: Alert) => fetchJson<Alert>('/alerts', { method: '
 export const updateAlert = (id: string, updates: Partial<Alert>) => fetchJson<Alert>(`/alerts/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
 export const deleteAlert = (id: string) => fetchJson<void>(`/alerts/${id}`, { method: 'DELETE' });
 export const markAlertRead = (id: string) => updateAlert(id, { read: true });
+export const generateAlerts = () => fetchJson<{ success: boolean; alertsGenerated: { miseBasAlerts: number; postSevrageAlerts: number; engraissementAlerts: number } }>('/alerts/generate', { method: 'POST' });
 
 // Lots d'engraissement
 // Lots d'engraissement
@@ -74,12 +77,14 @@ export const getLotsEngraissement = () => fetchJson<LotEngraissement[]>('/lots-e
 export const addLotEngraissement = (item: LotEngraissement) => fetchJson<LotEngraissement>('/lots-engraissement', { method: 'POST', body: JSON.stringify(item) });
 export const updateLotEngraissement = (id: string, updates: Partial<LotEngraissement>) => fetchJson<LotEngraissement>(`/lots-engraissement/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
 export const deleteLotEngraissement = (id: string) => fetchJson<void>(`/lots-engraissement/${id}`, { method: 'DELETE' });
+export const markLotEngraissementReady = (id: string) => fetchJson<LotEngraissement>(`/lots-engraissement/${id}/mark-ready`, { method: 'POST' });
 
 // Lots Post-Sevrage
 export const getLotsPostSevrage = () => fetchJson<LotPostSevrage[]>('/lots-post-sevrage');
 export const addLotPostSevrage = (item: LotPostSevrage) => fetchJson<LotPostSevrage>('/lots-post-sevrage', { method: 'POST', body: JSON.stringify(item) });
 export const updateLotPostSevrage = (id: string, updates: Partial<LotPostSevrage>) => fetchJson<LotPostSevrage>(`/lots-post-sevrage/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
 export const deleteLotPostSevrage = (id: string) => fetchJson<void>(`/lots-post-sevrage/${id}`, { method: 'DELETE' });
+export const markLotPostSevrageReady = (id: string) => fetchJson<LotPostSevrage>(`/lots-post-sevrage/${id}/mark-ready`, { method: 'POST' });
 
 // Pesées
 // Note: getPesees returns all pesees. We'll simulate getPeseesForLot by filtering on client side for now, 
@@ -105,3 +110,4 @@ export const initializeDemoData = async () => {
     // Optional: Call a backend endpoint to seed data if needed
     console.log("Demo data initialization should be handled by backend seeding.");
 };
+

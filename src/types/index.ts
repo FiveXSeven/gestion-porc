@@ -23,7 +23,7 @@ export interface Saillie {
   methode: 'naturelle' | 'insemination';
   employe: string;
   datePrevueMiseBas: string;
-  statut: 'en_attente' | 'confirmee' | 'echouee';
+  statut: 'en_cours' | 'confirmee' | 'echouee';
 }
 
 export interface MiseBas {
@@ -70,7 +70,7 @@ export interface Depense {
 
 export interface Alert {
   id: string;
-  type: 'mise_bas' | 'sevrage' | 'vente' | 'sante';
+  type: 'mise_bas' | 'sevrage' | 'vente' | 'sante' | 'post_sevrage_pret' | 'engraissement_pret';
   message: string;
   date: string;
   read: boolean;
@@ -88,7 +88,7 @@ export interface LotEngraissement {
   poidsEntree: number;
   dateEntree: string;
   poidsCible: number;
-  statut: 'en_cours' | 'vendu' | 'partiel';
+  statut: 'en_cours' | 'vendu' | 'partiel' | 'pret' | 'termine';
   notes: string;
 }
 
@@ -104,7 +104,7 @@ export interface LotPostSevrage {
   poidsEntree: number;
   dateEntree: string;
   poidsCible: number;
-  statut: 'en_cours' | 'transfere' | 'vendu' | 'partiel';
+  statut: 'en_cours' | 'transfere' | 'vendu' | 'partiel' | 'pret' | 'termine';
   notes: string;
 }
 

@@ -4,8 +4,8 @@ import { StatCard } from '@/components/dashboard/StatCard';
 import { AlertsList } from '@/components/dashboard/AlertsList';
 import { RevenueChart } from '@/components/dashboard/RevenueChart';
 import * as api from '@/lib/api';
-import { Truie, Saillie, Portee, Vente, Depense, Alert, LotEngraissement, Pesee } from '@/types';
-import { PiggyBank, Heart, Baby, TrendingUp, TrendingDown, CalendarDays, Scale } from 'lucide-react';
+import { Truie, Saillie, Portee, Vente, Depense, Alert, LotEngraissement, LotPostSevrage, Pesee, MiseBas } from '@/types';
+import { PiggyBank, Heart, Baby, TrendingUp, TrendingDown, CalendarDays, Scale, CheckCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { format, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -20,7 +20,9 @@ const Dashboard = () => {
   const [depenses, setDepenses] = useState<Depense[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [lots, setLots] = useState<LotEngraissement[]>([]);
+  const [lotsPS, setLotsPS] = useState<LotPostSevrage[]>([]);
   const [pesees, setPesees] = useState<Pesee[]>([]);
+  const [misesBas, setMisesBas] = useState<MiseBas[]>([]);
 
   useEffect(() => {
     loadData();
@@ -36,7 +38,9 @@ const Dashboard = () => {
         depensesData,
         alertsData,
         lotsData,
-        peseesData
+        lotsPSData,
+        peseesData,
+        misesBasData
       ] = await Promise.all([
         api.getTruies(),
         api.getSaillies(),
@@ -45,7 +49,9 @@ const Dashboard = () => {
         api.getDepenses(),
         api.getAlerts(),
         api.getLotsEngraissement(),
-        api.getPesees()
+        api.getLotsPostSevrage(),
+        api.getPesees(),
+        api.getMisesBas()
       ]);
 
       setTruies(truiesData);
@@ -55,7 +61,9 @@ const Dashboard = () => {
       setDepenses(depensesData);
       setAlerts(alertsData);
       setLots(lotsData);
+      setLotsPS(lotsPSData);
       setPesees(peseesData);
+      setMisesBas(misesBasData);
     } catch (error) {
       console.error(error);
       toast.error('Erreur lors du chargement des données du tableau de bord');
@@ -86,6 +94,13 @@ const Dashboard = () => {
   const lotsEnCours = lots.filter(l => l.statut === 'en_cours');
   const totalAnimauxEngraissement = lotsEnCours.reduce((sum, l) => sum + l.nombreActuel, 0);
 
+  // Completed stats (termine or vendu)
+  const lotsPSTermines = lotsPS.filter(l => l.statut === 'termine' || l.statut === 'vendu' || l.statut === 'transfere');
+  const totalPorceletsTermines = lotsPSTermines.reduce((sum, l) => sum + l.nombreInitial, 0);
+  
+  const lotsEngTermines = lots.filter(l => l.statut === 'termine' || l.statut === 'vendu');
+  const totalPorcsTermines = lotsEngTermines.reduce((sum, l) => sum + l.nombreInitial, 0);
+
   const getPeseesForLot = (lotId: string) => {
     return pesees.filter(p => p.lotId === lotId).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   };
@@ -105,10 +120,13 @@ const Dashboard = () => {
     ? lotsEnCours.reduce((sum, lot) => sum + calculateGMQ(lot), 0) / lotsEnCours.length
     : 0;
 
+  // Filter out saillies that already have a mise bas (only show those without a birth yet)
+  const sailliesWithMiseBas = new Set(misesBas.map(m => m.saillieId));
   const prochainsMisesBas = saillies
-    .filter(s => s.statut === 'confirmee')
+    .filter(s => (s.statut === 'confirmee' || s.statut === 'en_cours') && !sailliesWithMiseBas.has(s.id))
     .sort((a, b) => new Date(a.datePrevueMiseBas).getTime() - new Date(b.datePrevueMiseBas).getTime())
-    .slice(0, 3);
+    .slice(0, 5);
+
 
   return (
     <MainLayout>
@@ -124,7 +142,7 @@ const Dashboard = () => {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 lg:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 lg:gap-6">
           <StatCard
             title="Truies actives"
             value={truiesActives}
@@ -152,6 +170,13 @@ const Dashboard = () => {
             subtitle={`GMQ: ${gmqMoyen.toFixed(3)} kg/j`}
             icon={Scale}
             variant="warning"
+          />
+          <StatCard
+            title="Terminés"
+            value={totalPorceletsTermines + totalPorcsTermines}
+            subtitle={`${totalPorceletsTermines} PS | ${totalPorcsTermines} Eng`}
+            icon={CheckCircle}
+            variant="success"
           />
           <StatCard
             title="Bénéfice"
@@ -230,6 +255,8 @@ const Dashboard = () => {
             </div>
           )}
         </div>
+
+
       </div>
     </MainLayout>
   );

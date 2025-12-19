@@ -68,3 +68,19 @@ export const remove = async (req: Request, res: Response) => {
         res.status(500).json({ error: 'Error deleting lot engraissement' });
     }
 };
+
+export const markReady = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const updatedLot = await prisma.lotEngraissement.update({
+            where: { id },
+            data: {
+                statut: 'pret',
+            },
+        });
+        res.json(updatedLot);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Error marking lot as ready' });
+    }
+};
