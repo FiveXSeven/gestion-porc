@@ -232,8 +232,27 @@ const Portees = () => {
         };
         await api.addPesee(initialPeseeData);
 
+        // Create alert for sevrage completion
+        await api.addAlert({
+          id: '',
+          type: 'sevrage',
+          message: `Portée de ${truie?.identification} sevrée: ${weanedCount} porcelets, lot ${createdLot.identification} créé`,
+          date: new Date().toISOString(),
+          read: false,
+          relatedId: sevragePortee.id,
+        });
+
         toast.success('Portée sevrée et lot créé avec succès');
       } else {
+        // Create alert for sevrage without lot creation
+        await api.addAlert({
+          id: '',
+          type: 'sevrage',
+          message: `Portée de ${truie?.identification} sevrée: ${sevrageFormData.nombreSevles} porcelets`,
+          date: new Date().toISOString(),
+          read: false,
+          relatedId: sevragePortee.id,
+        });
         toast.success('Portée sevrée avec succès');
       }
 

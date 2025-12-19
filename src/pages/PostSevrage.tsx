@@ -203,6 +203,17 @@ const PostSevrage = () => {
     if (confirm(`Marquer le lot ${lot.identification} comme terminé (sans transfert) ?`)) {
       try {
         await api.updateLotPostSevrage(lot.id, { statut: 'termine' });
+        
+        // Create alert for termination
+        await api.addAlert({
+          id: '',
+          type: 'vente',
+          message: `Lot ${lot.identification} terminé: ${lot.nombreActuel} animaux`,
+          date: new Date().toISOString(),
+          read: false,
+          relatedId: lot.id,
+        });
+        
         loadData();
         toast.success('Lot marqué comme terminé');
       } catch (error) {
@@ -325,6 +336,16 @@ const PostSevrage = () => {
           notes: 'Pesée d\'entrée (Transfert)',
         };
         await api.addPesee(initialPesee);
+
+        // Create alert for transfer
+        await api.addAlert({
+          id: '',
+          type: 'vente',
+          message: `Lot ${transferLot.identification} transféré en engraissement: ${transferCount} animaux`,
+          date: new Date().toISOString(),
+          read: false,
+          relatedId: transferLot.id,
+        });
 
         toast.success('Transfert effectué et lot d\'engraissement créé');
       } else {

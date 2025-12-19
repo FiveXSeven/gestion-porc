@@ -39,6 +39,14 @@ export const AlertNotificationProvider = ({ children }: AlertNotificationProvide
     }
     
     try {
+      // First, trigger alert generation on the backend
+      // This checks for mise bas, target weights, etc. and creates alerts
+      await api.generateAlerts().catch(err => {
+        console.warn('Alert generation failed:', err);
+        // Continue even if generation fails
+      });
+      
+      // Then fetch all alerts
       const data = await api.getAlerts();
       
       // Check for new unread alerts and show popup (skip first fetch to avoid spam on login)

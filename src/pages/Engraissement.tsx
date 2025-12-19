@@ -191,6 +191,17 @@ const Engraissement = () => {
     if (confirm(`Confirmer que le lot ${lot.identification} est terminé ?`)) {
       try {
         await api.updateLotEngraissement(lot.id, { statut: 'termine' });
+        
+        // Create alert for termination
+        await api.addAlert({
+          id: '',
+          type: 'vente',
+          message: `Lot d'engraissement ${lot.identification} terminé: ${lot.nombreActuel} porcs`,
+          date: new Date().toISOString(),
+          read: false,
+          relatedId: lot.id,
+        });
+        
         loadData();
         toast.success('Lot marqué comme terminé');
       } catch (error) {
