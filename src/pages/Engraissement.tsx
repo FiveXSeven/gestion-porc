@@ -117,6 +117,13 @@ const Engraissement = () => {
 
     const nombreInitial = parseInt(lotFormData.nombreInitial);
     const poidsEntree = parseFloat(lotFormData.poidsEntree);
+    const poidsCible = parseFloat(lotFormData.poidsCible) || 115;
+
+    // ERREUR #6: Valider que le poids cible est supérieur au poids d'entrée
+    if (poidsCible <= poidsEntree) {
+      toast.error('Le poids cible doit être supérieur au poids d\'entrée');
+      return;
+    }
 
     try {
       if (editingLot) {
@@ -126,7 +133,7 @@ const Engraissement = () => {
           dateEntree: lotFormData.dateEntree,
           nombreInitial,
           poidsEntree,
-          poidsCible: parseFloat(lotFormData.poidsCible) || 115,
+          poidsCible,
           notes: lotFormData.notes,
         });
         toast.success('Lot modifié avec succès');
@@ -140,7 +147,7 @@ const Engraissement = () => {
           nombreActuel: nombreInitial,
           poidsEntree,
           dateEntree: lotFormData.dateEntree,
-          poidsCible: parseFloat(lotFormData.poidsCible) || 115,
+          poidsCible,
           statut: 'en_cours',
           notes: lotFormData.notes,
         };

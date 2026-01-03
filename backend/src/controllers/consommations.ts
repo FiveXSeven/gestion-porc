@@ -76,10 +76,29 @@ export const getConsommationsForLot = async (req: Request, res: Response) => {
     }
 };
 
-// Delete consommation
+// ERREUR #3: Restaurer le stock avant suppression
 export const deleteConsommation = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
+        
+        const consommation = await prisma.consommationAliment.findUnique({ 
+            where: { id },
+            include: { stockAliment: true }
+        });
+        
+        if (!consommation) {
+            return res.status(404).json({ error: 'Consommation non trouvée' });
+        }
+
+        // Restaurer le stock
+        await prisma.stockAliment.update({
+            where: { id: consommation.stockAlimentId },
+            data: { 
+                quantite: consommation.stockAliment.quantite + consommation.quantiteSacs,
+                dateMiseAJour: new Date()
+            }
+        });
+
         await prisma.consommationAliment.delete({ where: { id } });
         res.status(204).send();
     } catch (error) {

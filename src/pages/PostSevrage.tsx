@@ -130,6 +130,13 @@ const PostSevrage = () => {
 
     const nombreInitial = parseInt(lotFormData.nombreInitial);
     const poidsEntree = parseFloat(lotFormData.poidsEntree);
+    const poidsCible = parseFloat(lotFormData.poidsCible) || 25;
+
+    // ERREUR #6: Valider que le poids cible est supérieur au poids d'entrée
+    if (poidsCible <= poidsEntree) {
+      toast.error('Le poids cible doit être supérieur au poids d\'entrée');
+      return;
+    }
 
     try {
       if (editingLot) {
@@ -139,7 +146,7 @@ const PostSevrage = () => {
           dateEntree: lotFormData.dateEntree,
           nombreInitial,
           poidsEntree,
-          poidsCible: parseFloat(lotFormData.poidsCible) || 25,
+          poidsCible,
           notes: lotFormData.notes,
         });
         toast.success('Lot modifié avec succès');
@@ -153,7 +160,7 @@ const PostSevrage = () => {
           nombreActuel: nombreInitial,
           poidsEntree,
           dateEntree: lotFormData.dateEntree,
-          poidsCible: parseFloat(lotFormData.poidsCible) || 25,
+          poidsCible,
           statut: 'en_cours',
           notes: lotFormData.notes,
         };
@@ -303,6 +310,14 @@ const PostSevrage = () => {
     e.preventDefault();
     if (!transferLot || !transferFormData.date || !transferFormData.poidsTotal || !transferFormData.nombreTransferes) {
       toast.error('Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+
+    // ERREUR #15: Valider que la date de transfert est après la date d'entrée
+    const transferDate = new Date(transferFormData.date);
+    const entreeDate = new Date(transferLot.dateEntree);
+    if (transferDate < entreeDate) {
+      toast.error('La date de transfert doit être après la date d\'entrée du lot');
       return;
     }
 

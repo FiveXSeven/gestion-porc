@@ -77,7 +77,7 @@ export const getAllTraitements = async (req: Request, res: Response) => {
     }
 };
 
-// Create traitement
+// ERREUR #20: Créer une alerte pour la fin du traitement
 export const createTraitement = async (req: Request, res: Response) => {
     try {
         const { date, nom, medicament, dureeJours, lotType, lotId, truieId, notes } = req.body;
@@ -93,6 +93,20 @@ export const createTraitement = async (req: Request, res: Response) => {
                 truieId: truieId || null,
                 notes: notes || '',
             },
+        });
+
+        // Créer une alerte pour la fin du traitement
+        const dateFinTraitement = new Date(date);
+        dateFinTraitement.setDate(dateFinTraitement.getDate() + dureeJours);
+        
+        await prisma.alert.create({
+            data: {
+                type: 'sante',
+                message: `Fin du traitement "${nom}" (${medicament}) prévue le ${dateFinTraitement.toLocaleDateString('fr-FR')}`,
+                date: new Date(),
+                read: false,
+                relatedId: traitement.id,
+            }
         });
 
         res.status(201).json(traitement);

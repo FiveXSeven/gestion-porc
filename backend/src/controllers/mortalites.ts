@@ -96,10 +96,39 @@ export const getMortalitesForLot = async (req: Request, res: Response) => {
     }
 };
 
-// Delete mortalite
+// ERREUR #2: Restaurer le nombre d'animaux avant suppression
 export const deleteMortalite = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
+        
+        const mortalite = await prisma.mortalite.findUnique({ where: { id } });
+        if (!mortalite) {
+            return res.status(404).json({ error: 'Mortalité non trouvée' });
+        }
+
+        // Restaurer le nombre d'animaux au lot
+        if (mortalite.lotEngraissementId) {
+            const lot = await prisma.lotEngraissement.findUnique({ 
+                where: { id: mortalite.lotEngraissementId } 
+            });
+            if (lot) {
+                await prisma.lotEngraissement.update({
+                    where: { id: mortalite.lotEngraissementId },
+                    data: { nombreActuel: lot.nombreActuel + mortalite.nombre }
+                });
+            }
+        } else if (mortalite.lotPostSevrageId) {
+            const lot = await prisma.lotPostSevrage.findUnique({ 
+                where: { id: mortalite.lotPostSevrageId } 
+            });
+            if (lot) {
+                await prisma.lotPostSevrage.update({
+                    where: { id: mortalite.lotPostSevrageId },
+                    data: { nombreActuel: lot.nombreActuel + mortalite.nombre }
+                });
+            }
+        }
+
         await prisma.mortalite.delete({ where: { id } });
         res.status(204).send();
     } catch (error) {

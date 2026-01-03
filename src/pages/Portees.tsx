@@ -160,14 +160,28 @@ const Portees = () => {
     }
   };
 
+  // ERREUR #19: Calculer l'estimation de date de sevrage (21-28 jours après naissance)
+  const getSevrageEstimation = (portee: Portee) => {
+    const miseBas = misesBas.find(m => m.id === portee.miseBasId);
+    if (!miseBas) return null;
+    const naissance = new Date(miseBas.date);
+    const sevrageMin = new Date(naissance.getTime() + 21 * 24 * 60 * 60 * 1000);
+    const sevrageMax = new Date(naissance.getTime() + 28 * 24 * 60 * 60 * 1000);
+    return { sevrageMin, sevrageMax, naissance };
+  };
+
   const openSevrageDialog = (portee: Portee) => {
     const miseBas = misesBas.find(m => m.id === portee.miseBasId);
     // Pre-fill poidsTotal: nombreActuel × poidsMoyen
     const estimatedWeight = miseBas ? (portee.nombreActuel * miseBas.poidsMoyen).toFixed(1) : '';
     
+    // ERREUR #19: Pré-remplir avec la date estimée de sevrage (21 jours)
+    const estimation = getSevrageEstimation(portee);
+    const suggestedDate = estimation ? estimation.sevrageMin.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+    
     setSevragePortee(portee);
     setSevrageFormData({
-      date: new Date().toISOString().split('T')[0],
+      date: suggestedDate,
       poidsTotal: estimatedWeight,
       nombreSevles: portee.nombreActuel.toString(),
       createLot: true,
@@ -180,6 +194,17 @@ const Portees = () => {
     if (!sevragePortee || !sevrageFormData.date || !sevrageFormData.poidsTotal || !sevrageFormData.nombreSevles) {
       toast.error('Veuillez remplir tous les champs obligatoires');
       return;
+    }
+
+    // ERREUR #14: Valider que la date de sevrage est après la mise bas
+    const miseBas = misesBas.find(m => m.id === sevragePortee.miseBasId);
+    if (miseBas) {
+      const sevrageDate = new Date(sevrageFormData.date);
+      const miseBasDate = new Date(miseBas.date);
+      if (sevrageDate < miseBasDate) {
+        toast.error('La date de sevrage doit être après la date de mise bas');
+        return;
+      }
     }
 
     const truie = truies.find(t => t.id === sevragePortee.truieId);
@@ -425,6 +450,20 @@ const Portees = () => {
                   Sevrer la portée
                 </DialogTitle>
               </DialogHeader>
+              {/* ERREUR #19: Afficher l'estimation de date de sevrage */}
+              {sevragePortee && (() => {
+                const estimation = getSevrageEstimation(sevragePortee);
+                if (estimation) {
+                  return (
+                    <div className="bg-info/10 text-info rounded-lg p-3 text-sm">
+                      <p className="font-medium">📅 Estimation de sevrage</p>
+                      <p>Entre le {format(estimation.sevrageMin, "d MMM", { locale: fr })} et le {format(estimation.sevrageMax, "d MMM yyyy", { locale: fr })}</p>
+                      <p className="text-xs mt-1 opacity-80">(21 à 28 jours après la naissance)</p>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
               <form onSubmit={handleSevrageSubmit} className="space-y-4 mt-4">
                 <div className="space-y-2">
                   <Label htmlFor="sevrageDate">Date de sevrage *</Label>

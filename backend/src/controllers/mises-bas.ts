@@ -29,6 +29,13 @@ export const create = async (req: Request, res: Response) => {
                 notes: data.notes || "",
             },
         });
+
+        // ERREUR #1: Mettre à jour le statut de la truie vers 'allaitante'
+        await prisma.truie.update({
+            where: { id: data.truieId },
+            data: { statut: 'allaitante' }
+        });
+
         res.status(201).json(newMiseBas);
     } catch (error) {
         console.error(error);
@@ -56,6 +63,26 @@ export const update = async (req: Request, res: Response) => {
 export const remove = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
+
+        // ERREUR #8: Vérifier s'il existe une portée avant suppression
+        const portee = await prisma.portee.findUnique({
+            where: { miseBasId: id }
+        });
+        if (portee) {
+            return res.status(400).json({ 
+                error: 'Impossible de supprimer cette mise bas car une portée y est associée. Supprimez d\'abord la portée.' 
+            });
+        }
+
+        // ERREUR #13: Restaurer le statut de la truie
+        const miseBas = await prisma.miseBas.findUnique({ where: { id } });
+        if (miseBas) {
+            await prisma.truie.update({
+                where: { id: miseBas.truieId },
+                data: { statut: 'gestante' }
+            });
+        }
+
         await prisma.miseBas.delete({
             where: { id },
         });

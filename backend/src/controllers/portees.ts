@@ -52,9 +52,31 @@ export const update = async (req: Request, res: Response) => {
     }
 };
 
+// ERREUR #9: Vérifier les lots avant suppression
 export const remove = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
+
+        // Vérifier s'il existe des lots d'engraissement
+        const lotEng = await prisma.lotEngraissement.findFirst({
+            where: { porteeId: id }
+        });
+        if (lotEng) {
+            return res.status(400).json({ 
+                error: 'Impossible de supprimer cette portée car des lots d\'engraissement y sont associés. Supprimez d\'abord les lots.' 
+            });
+        }
+
+        // Vérifier s'il existe des lots post-sevrage
+        const lotPS = await prisma.lotPostSevrage.findFirst({
+            where: { porteeId: id }
+        });
+        if (lotPS) {
+            return res.status(400).json({ 
+                error: 'Impossible de supprimer cette portée car des lots post-sevrage y sont associés. Supprimez d\'abord les lots.' 
+            });
+        }
+
         await prisma.portee.delete({
             where: { id },
         });

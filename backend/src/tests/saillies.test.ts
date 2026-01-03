@@ -19,12 +19,28 @@ jest.mock('../prisma', () => ({
                     truie: { identification: 'TR-1' }
                 }
             ])),
+            findUnique: jest.fn((args) => {
+                if (args.where.id === '1') {
+                    return Promise.resolve({ id: '1', truieId: 'truie1', statut: 'en_cours' });
+                }
+                if (args.where.saillieId) {
+                    return Promise.resolve(null); // No mise bas
+                }
+                return Promise.resolve(null);
+            }),
             create: jest.fn((args) => Promise.resolve({ id: '2', ...args.data })),
             update: jest.fn((args) => Promise.resolve({ id: args.where.id, ...args.data })),
             delete: jest.fn(() => Promise.resolve({ id: '1' })),
         },
         truie: {
+            findUnique: jest.fn(() => Promise.resolve({ id: 'truie1', statut: 'active' })),
             update: jest.fn()
+        },
+        miseBas: {
+            findUnique: jest.fn(() => Promise.resolve(null))
+        },
+        alert: {
+            create: jest.fn(() => Promise.resolve({ id: 'alert1' }))
         }
     }
 }));
