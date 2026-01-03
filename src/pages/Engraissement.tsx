@@ -789,32 +789,33 @@ const Engraissement = () => {
                         </p>
                       </div>
                     </div>
-                    <span className={cn(
-                      "px-3 py-1 rounded-full text-xs font-medium border",
-                      statusColors[lot.statut]
-                    )}>
-                      {statusLabels[lot.statut]}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={cn(
+                        "px-3 py-1 rounded-full text-xs font-medium border",
+                        statusColors[lot.statut]
+                      )}>
+                        {statusLabels[lot.statut]}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEdit(lot)}
+                        className="h-8 w-8 text-muted-foreground hover:text-primary"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(lot.id)}
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
 
-                  <div className="flex gap-1 absolute top-6 right-6">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleEdit(lot)}
-                      className="h-8 w-8 text-muted-foreground hover:text-primary bg-card/80 backdrop-blur-sm"
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDelete(lot.id)}
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive bg-card/80 backdrop-blur-sm"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+
 
                   {/* Progress bar */}
                   <div className="mb-4">

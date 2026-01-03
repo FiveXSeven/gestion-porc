@@ -26,6 +26,7 @@ import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Tableau de bord' },
+  { to: '/alertes', icon: Bell, label: 'Alertes' },
   { to: '/truies', icon: PiggyBank, label: 'Truies' },
   { to: '/saillies', icon: Heart, label: 'Saillies' },
   { to: '/portees', icon: Baby, label: 'Portées' },
@@ -36,7 +37,6 @@ const navItems = [
   { to: '/ventes', icon: ShoppingCart, label: 'Ventes' },
   { to: '/depenses', icon: Receipt, label: 'Dépenses' },
   { to: '/rapports', icon: FileText, label: 'Rapports' },
-  { to: '/alertes', icon: Bell, label: 'Alertes' },
 ];
 
 export const Sidebar = () => {
