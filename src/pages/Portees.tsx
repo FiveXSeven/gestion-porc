@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import * as api from '@/lib/api';
 import { Portee, MiseBas, Truie, Saillie, LotPostSevrage, Pesee } from '@/types';
-import { Plus, Baby, Scale, Search, Edit2, Trash2, ArrowRight } from 'lucide-react';
+import { Plus, PiggyBank, Scale, Search, Edit2, Trash2, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -536,7 +536,7 @@ const Portees = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filteredPortees.length === 0 ? (
             <div className="col-span-full text-center py-16 bg-card rounded-2xl border border-border">
-              <Baby className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
+              <PiggyBank className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
               <p className="text-muted-foreground">Aucune portée enregistrée</p>
             </div>
           ) : (
@@ -553,7 +553,7 @@ const Portees = () => {
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 rounded-xl bg-info/10 flex items-center justify-center">
-                        <Baby className="h-6 w-6 text-info" />
+                        <PiggyBank className="h-6 w-6 text-info" />
                       </div>
                       <div>
                         <p className="font-semibold text-foreground">{truie?.identification}</p>

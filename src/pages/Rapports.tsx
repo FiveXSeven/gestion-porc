@@ -3,7 +3,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import * as api from '@/lib/api';
 import { Truie, Saillie, MiseBas, Portee, Vente, Depense, LotEngraissement, LotPostSevrage } from '@/types';
-import { FileText, Printer, TrendingUp, TrendingDown, PiggyBank, Scale, Baby, ShoppingCart, Receipt, Calendar } from 'lucide-react';
+import { FileText, Printer, TrendingUp, TrendingDown, PiggyBank, Scale, ShoppingCart, Receipt, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -180,7 +180,7 @@ const Rapports = () => {
               <p className="text-xs text-muted-foreground">{truiesGestantes} gestantes</p>
             </div>
             <div className="p-4 rounded-xl bg-accent/10 print:bg-gray-100 text-center">
-              <Baby className="h-8 w-8 mx-auto mb-2 text-accent" />
+              <PiggyBank className="h-8 w-8 mx-auto mb-2 text-accent" />
               <p className="text-2xl font-bold">{totalAnimauxPS}</p>
               <p className="text-sm text-muted-foreground">Post-sevrage</p>
               <p className="text-xs text-muted-foreground">{lotsPSEnCours.length} lots</p>

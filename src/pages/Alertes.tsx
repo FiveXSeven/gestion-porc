@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import * as api from '@/lib/api';
 import { Alert } from '@/types';
-import { Bell, Baby, Calendar, ShoppingCart, HeartPulse, Check, Trash2, Scale, Target } from 'lucide-react';
+import { Bell, PiggyBank, Calendar, ShoppingCart, HeartPulse, Check, Trash2, Scale, Target } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
 const alertIcons = {
-  mise_bas: Baby,
+  mise_bas: PiggyBank,
   sevrage: Calendar,
   vente: ShoppingCart,
   sante: HeartPulse,

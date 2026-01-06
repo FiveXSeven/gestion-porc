@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import * as api from '@/lib/api';
 import { Truie, Saillie, MiseBas, Portee } from '@/types';
-import { Plus, Search, Edit2, Trash2, PiggyBank, Eye, Heart, Baby, Calendar, TrendingUp } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, PiggyBank, Eye, Heart, Calendar, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';

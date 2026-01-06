@@ -5,7 +5,7 @@ import { AlertsList } from '@/components/dashboard/AlertsList';
 import { RevenueChart } from '@/components/dashboard/RevenueChart';
 import * as api from '@/lib/api';
 import { Truie, Saillie, Portee, Vente, Depense, Alert, LotEngraissement, LotPostSevrage, Pesee, MiseBas } from '@/types';
-import { PiggyBank, Heart, Baby, TrendingUp, TrendingDown, CalendarDays, Scale, CheckCircle } from 'lucide-react';
+import { PiggyBank, Heart, TrendingUp, TrendingDown, CalendarDays, Scale, CheckCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { format, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -198,7 +198,7 @@ const Dashboard = () => {
             title="Portées en cours"
             value={porteesEnCours}
             subtitle="En allaitement"
-            icon={Baby}
+            icon={PiggyBank}
             variant="success"
           />
           <StatCard
@@ -297,7 +297,7 @@ const Dashboard = () => {
                   >
                     <div className="flex items-center gap-2 mb-2">
                       <div className="w-8 h-8 rounded bg-accent/10 flex items-center justify-center">
-                        <Baby className="h-4 w-4 text-accent" />
+                        <PiggyBank className="h-4 w-4 text-accent" />
                       </div>
                       <div>
                         <p className="font-semibold text-sm text-foreground">{truie?.identification}</p>
