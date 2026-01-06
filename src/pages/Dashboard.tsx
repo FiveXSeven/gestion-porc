@@ -167,19 +167,19 @@ const Dashboard = () => {
 
   return (
     <MainLayout>
-      <div className="space-y-8">
+      <div className="space-y-6">
         {/* Header */}
         <div className="animate-fade-in">
-          <h1 className="font-display text-3xl lg:text-4xl font-bold text-foreground">
+          <h1 className="font-display text-2xl lg:text-3xl font-bold text-foreground">
             Bonjour, {user?.name?.split(' ')[0]} 👋
           </h1>
-          <p className="text-muted-foreground mt-2">
-            Voici un aperçu de votre élevage aujourd'hui
+          <p className="text-sm text-muted-foreground mt-1">
+            Aperçu de votre élevage
           </p>
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 lg:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
           <StatCard
             title="Truies actives"
             value={truiesActives}
@@ -225,47 +225,47 @@ const Dashboard = () => {
         </div>
 
         {/* KPIs Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 animate-slide-up" style={{ animationDelay: '0.1s' }}>
-          <div className="bg-card rounded-2xl border border-border p-4 shadow-card">
-            <p className="text-sm text-muted-foreground mb-1">Taux de fertilité</p>
-            <p className="text-2xl font-display font-bold text-primary">{tauxFertilite}%</p>
-            <p className="text-xs text-muted-foreground mt-1">{sailliesConfirmees}/{totalSaillies} confirmées</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 animate-slide-up" style={{ animationDelay: '0.1s' }}>
+          <div className="bg-card rounded-lg border border-border p-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Fertilité</p>
+            <p className="text-xl font-display font-bold text-primary mt-1">{tauxFertilite}%</p>
+            <p className="text-xs text-muted-foreground mt-1">{sailliesConfirmees}/{totalSaillies}</p>
           </div>
-          <div className="bg-card rounded-2xl border border-border p-4 shadow-card">
-            <p className="text-sm text-muted-foreground mb-1">Nés vivants/portée</p>
-            <p className="text-2xl font-display font-bold text-success">{moyenneNesVivants}</p>
-            <p className="text-xs text-muted-foreground mt-1">Moyenne sur {misesBas.length} mises bas</p>
+          <div className="bg-card rounded-lg border border-border p-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Nés/portée</p>
+            <p className="text-xl font-display font-bold text-success mt-1">{moyenneNesVivants}</p>
+            <p className="text-xs text-muted-foreground mt-1">{misesBas.length} mises bas</p>
           </div>
-          <div className="bg-card rounded-2xl border border-border p-4 shadow-card">
-            <p className="text-sm text-muted-foreground mb-1">Mortalité naissance</p>
-            <p className="text-2xl font-display font-bold text-destructive">{tauxMortaliteNaissance}%</p>
-            <p className="text-xs text-muted-foreground mt-1">{totalMortNes} mort-nés / {totalNaissances} total</p>
+          <div className="bg-card rounded-lg border border-border p-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Mortalité</p>
+            <p className="text-xl font-display font-bold text-destructive mt-1">{tauxMortaliteNaissance}%</p>
+            <p className="text-xs text-muted-foreground mt-1">{totalMortNes}/{totalNaissances}</p>
           </div>
-          <div className="bg-card rounded-2xl border border-border p-4 shadow-card">
-            <p className="text-sm text-muted-foreground mb-1">Durée engraissement</p>
-            <p className="text-2xl font-display font-bold text-info">{dureeMoyenneEngraissement}j</p>
-            <p className="text-xs text-muted-foreground mt-1">Moyenne sur {lotsEngTermines.length} lots</p>
+          <div className="bg-card rounded-lg border border-border p-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Durée eng.</p>
+            <p className="text-xl font-display font-bold text-info mt-1">{dureeMoyenneEngraissement}j</p>
+            <p className="text-xs text-muted-foreground mt-1">{lotsEngTermines.length} lots</p>
           </div>
         </div>
 
         {/* Main content */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           {/* Chart */}
-          <div className="xl:col-span-2 bg-card rounded-2xl border border-border p-6 shadow-card animate-slide-up">
-            <h2 className="font-display text-xl font-semibold text-foreground mb-6">
+          <div className="xl:col-span-2 bg-card rounded-lg border border-border p-4 animate-slide-up">
+            <h2 className="font-display text-base font-semibold text-foreground mb-4">
               Évolution financière
             </h2>
             <RevenueChart ventes={ventes} depenses={depenses} />
           </div>
 
           {/* Alerts */}
-          <div className="bg-card rounded-2xl border border-border p-6 shadow-card animate-slide-up" style={{ animationDelay: '0.1s' }}>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="font-display text-xl font-semibold text-foreground">
+          <div className="bg-card rounded-lg border border-border p-4 animate-slide-up" style={{ animationDelay: '0.1s' }}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-base font-semibold text-foreground">
                 Alertes
               </h2>
-              <span className="px-3 py-1 rounded-full bg-destructive/10 text-destructive text-sm font-medium">
-                {alerts.filter(a => !a.read).length} nouvelles
+              <span className="px-2 py-1 rounded text-xs font-semibold bg-destructive/10 text-destructive">
+                {alerts.filter(a => !a.read).length}
               </span>
             </div>
             <AlertsList alerts={alerts} onMarkRead={handleMarkAlertRead} />
@@ -273,42 +273,40 @@ const Dashboard = () => {
         </div>
 
         {/* Upcoming events */}
-        <div className="bg-card rounded-2xl border border-border p-6 shadow-card animate-slide-up" style={{ animationDelay: '0.2s' }}>
-          <div className="flex items-center gap-3 mb-6">
-            <CalendarDays className="h-6 w-6 text-primary" />
-            <h2 className="font-display text-xl font-semibold text-foreground">
+        <div className="bg-card rounded-lg border border-border p-4 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+          <div className="flex items-center gap-2 mb-4">
+            <CalendarDays className="h-5 w-5 text-primary" />
+            <h2 className="font-display text-base font-semibold text-foreground">
               Prochaines mises bas
             </h2>
           </div>
 
           {prochainsMisesBas.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">
+            <p className="text-muted-foreground text-center py-6 text-sm">
               Aucune mise bas prévue prochainement
             </p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {prochainsMisesBas.map((saillie, index) => {
                 const truie = truies.find(t => t.id === saillie.truieId);
                 return (
                   <div
                     key={saillie.id}
-                    className="p-4 rounded-xl bg-accent/5 border border-accent/20 animate-slide-up"
+                    className="p-3 rounded-lg bg-accent/5 border border-accent/20 animate-slide-up"
                     style={{ animationDelay: `${0.3 + index * 0.1}s` }}
                   >
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
-                        <Baby className="h-5 w-5 text-accent" />
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 rounded bg-accent/10 flex items-center justify-center">
+                        <Baby className="h-4 w-4 text-accent" />
                       </div>
                       <div>
-                        <p className="font-semibold text-foreground">{truie?.identification}</p>
+                        <p className="font-semibold text-sm text-foreground">{truie?.identification}</p>
                         <p className="text-xs text-muted-foreground">Truie</p>
                       </div>
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      Date prévue:
-                    </p>
-                    <p className="font-medium text-foreground">
-                      {format(new Date(saillie.datePrevueMiseBas), "d MMMM yyyy", { locale: fr })}
+                    <p className="text-xs text-muted-foreground mb-1">Date prévue:</p>
+                    <p className="font-medium text-sm text-foreground">
+                      {format(new Date(saillie.datePrevueMiseBas), "d MMM yyyy", { locale: fr })}
                     </p>
                   </div>
                 );

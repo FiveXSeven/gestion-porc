@@ -70,20 +70,20 @@ export const Sidebar = () => {
         )}
       >
         {/* Logo */}
-        <div className="p-6 border-b border-sidebar-border">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-sidebar-primary flex items-center justify-center">
-              <Warehouse className="h-7 w-7 text-sidebar-primary-foreground" />
+        <div className="p-4 border-b border-sidebar-border">
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 rounded-lg bg-sidebar-primary flex items-center justify-center">
+              <Warehouse className="h-6 w-6 text-sidebar-primary-foreground" />
             </div>
             <div>
-              <h1 className="font-display font-bold text-xl text-sidebar-foreground">PorcGestion</h1>
-              <p className="text-sm text-sidebar-foreground/60">Gestion porcine</p>
+              <h1 className="font-display font-bold text-lg text-sidebar-foreground">PorcGestion</h1>
+              <p className="text-xs text-sidebar-foreground/60">Gestion</p>
             </div>
           </div>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -91,18 +91,18 @@ export const Sidebar = () => {
               onClick={() => setIsOpen(false)}
               className={({ isActive }) =>
                 cn(
-                  "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200",
+                  "flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200",
                   isActive
-                    ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-md"
+                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
                     : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 )
               }
             >
-              <item.icon className="h-5 w-5" />
-              {item.label}
+              <item.icon className="h-4 w-4" />
+              <span className="truncate">{item.label}</span>
               {/* Show notification badge for Alertes */}
               {item.to === '/alertes' && unreadCount > 0 && (
-                <span className="ml-auto px-2 py-0.5 rounded-full bg-destructive text-destructive-foreground text-xs font-bold min-w-[20px] text-center">
+                <span className="ml-auto px-1.5 py-0.5 rounded text-xs font-bold bg-destructive text-destructive-foreground min-w-[18px] text-center">
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
               )}
@@ -111,25 +111,25 @@ export const Sidebar = () => {
         </nav>
 
         {/* User section */}
-        <div className="p-4 border-t border-sidebar-border">
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-sidebar-accent/50">
-            <div className="w-10 h-10 rounded-full bg-sidebar-primary flex items-center justify-center">
-              <span className="text-sidebar-primary-foreground font-semibold">
+        <div className="p-3 border-t border-sidebar-border">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-sidebar-accent/50">
+            <div className="w-8 h-8 rounded bg-sidebar-primary flex items-center justify-center shrink-0">
+              <span className="text-sidebar-primary-foreground font-semibold text-xs">
                 {user?.name?.charAt(0).toUpperCase() || 'U'}
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-sidebar-foreground truncate">{user?.name}</p>
+              <p className="text-xs font-medium text-sidebar-foreground truncate">{user?.name}</p>
               <p className="text-xs text-sidebar-foreground/60 truncate">{user?.email}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 mt-3">
+          <div className="flex items-center gap-2 mt-2">
             <Button
               variant="ghost"
               onClick={logout}
-              className="flex-1 justify-start text-sidebar-foreground/70 hover:text-destructive hover:bg-destructive/10"
+              className="flex-1 justify-start text-xs text-sidebar-foreground/70 hover:text-destructive hover:bg-destructive/10 h-8"
             >
-              <LogOut className="h-5 w-5 mr-3" />
+              <LogOut className="h-4 w-4 mr-2" />
               Déconnexion
             </Button>
             <ThemeToggle />
