@@ -1,5 +1,5 @@
 import { Alert } from '@/types';
-import { Bell, Baby, ShoppingCart, HeartPulse, Calendar } from 'lucide-react';
+import { Bell, PiggyBank, ShoppingCart, HeartPulse, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -10,7 +10,7 @@ interface AlertsListProps {
 }
 
 const alertIcons = {
-  mise_bas: Baby,
+  mise_bas: PiggyBank,
   sevrage: Calendar,
   vente: ShoppingCart,
   sante: HeartPulse,

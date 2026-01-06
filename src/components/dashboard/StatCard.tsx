@@ -42,34 +42,33 @@ export const StatCard = ({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-2xl border p-6 shadow-card transition-all duration-300 hover:shadow-card-hover animate-fade-in",
+        "relative overflow-hidden rounded-lg border p-4 transition-all duration-200 hover:shadow-md animate-fade-in",
         variantStyles[variant],
         className
       )}
     >
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-2 flex-1 min-w-0">
-          <p className="text-sm font-medium text-muted-foreground truncate" title={title}>{title}</p>
-          <p className="text-2xl sm:text-3xl font-display font-bold text-foreground break-words">{value}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1 flex-1 min-w-0">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide truncate">{title}</p>
+          <p className="text-xl sm:text-2xl font-display font-bold text-foreground">{value}</p>
           {subtitle && (
-            <p className="text-sm text-muted-foreground break-words">{subtitle}</p>
+            <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
           )}
           {trend && (
-            <div className="flex items-center gap-1 flex-wrap">
+            <div className="flex items-center gap-1 mt-2">
               <span
                 className={cn(
-                  "text-sm font-medium",
+                  "text-xs font-semibold",
                   trend.isPositive ? "text-success" : "text-destructive"
                 )}
               >
-                {trend.isPositive ? '+' : ''}{trend.value}%
+                {trend.isPositive ? '↑' : '↓'} {trend.value}%
               </span>
-              <span className="text-xs text-muted-foreground whitespace-nowrap">vs mois dernier</span>
             </div>
           )}
         </div>
-        <div className={cn("p-3 rounded-xl shrink-0", iconVariantStyles[variant])}>
-          <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
+        <div className={cn("p-2 rounded-lg shrink-0", iconVariantStyles[variant])}>
+          <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
         </div>
       </div>
     </div>

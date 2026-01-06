@@ -5,19 +5,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { getVentes, addVente } from '@/lib/storage';
+import * as api from '@/lib/api';
 import { Vente } from '@/types';
 import { Plus, ShoppingCart, TrendingUp, Search, Edit2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { updateVente, deleteVente } from '@/lib/storage';
 
 const typeLabels: Record<Vente['typeAnimal'], string> = {
   porcelet: 'Porcelet',
   porc_engraissement: 'Porc d\'engraissement',
   truie_reforme: 'Truie réformée',
-  verrat_reforme: 'Verrat réformé',
 };
 
 const Ventes = () => {
@@ -39,8 +37,14 @@ const Ventes = () => {
     loadVentes();
   }, []);
 
-  const loadVentes = () => {
-    setVentes(getVentes());
+  const loadVentes = async () => {
+    try {
+      const data = await api.getVentes();
+      setVentes(data);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors du chargement des ventes');
+    }
   };
 
   const resetForm = () => {
@@ -56,9 +60,9 @@ const Ventes = () => {
     setEditingVente(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.date || !formData.quantite || !formData.prixUnitaire) {
       toast.error('Veuillez remplir tous les champs obligatoires');
       return;
@@ -67,44 +71,49 @@ const Ventes = () => {
     const quantite = parseInt(formData.quantite);
     const prixUnitaire = parseFloat(formData.prixUnitaire);
 
-    if (editingVente) {
-      updateVente(editingVente.id, {
-        date: formData.date,
-        typeAnimal: formData.typeAnimal,
-        quantite,
-        poidsTotal: parseFloat(formData.poidsTotal) || 0,
-        prixUnitaire,
-        prixTotal: quantite * prixUnitaire,
-        acheteur: formData.acheteur,
-        notes: formData.notes,
-      });
-      toast.success('Vente modifiée avec succès');
-    } else {
-      const newVente: Vente = {
-        id: Date.now().toString(),
-        date: formData.date,
-        typeAnimal: formData.typeAnimal,
-        quantite,
-        poidsTotal: parseFloat(formData.poidsTotal) || 0,
-        prixUnitaire,
-        prixTotal: quantite * prixUnitaire,
-        acheteur: formData.acheteur,
-        notes: formData.notes,
-      };
-      
-      addVente(newVente);
-      toast.success('Vente enregistrée avec succès');
+    try {
+      if (editingVente) {
+        await api.updateVente(editingVente.id, {
+          date: formData.date,
+          typeAnimal: formData.typeAnimal,
+          quantite,
+          poidsTotal: parseFloat(formData.poidsTotal) || 0,
+          prixUnitaire,
+          prixTotal: quantite * prixUnitaire,
+          acheteur: formData.acheteur,
+          notes: formData.notes,
+        });
+        toast.success('Vente modifiée avec succès');
+      } else {
+        const newVente: Vente = {
+          id: '',
+          date: formData.date,
+          typeAnimal: formData.typeAnimal,
+          quantite,
+          poidsTotal: parseFloat(formData.poidsTotal) || 0,
+          prixUnitaire,
+          prixTotal: quantite * prixUnitaire,
+          acheteur: formData.acheteur,
+          notes: formData.notes,
+        };
+
+        await api.addVente(newVente);
+        toast.success('Vente enregistrée avec succès');
+      }
+
+      loadVentes();
+      setIsDialogOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de l\'enregistrement');
     }
-    
-    loadVentes();
-    setIsDialogOpen(false);
-    resetForm();
   };
 
   const handleEdit = (vente: Vente) => {
     setEditingVente(vente);
     setFormData({
-      date: vente.date,
+      date: vente.date.split('T')[0],
       typeAnimal: vente.typeAnimal,
       quantite: vente.quantite.toString(),
       poidsTotal: vente.poidsTotal.toString(),
@@ -115,15 +124,20 @@ const Ventes = () => {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Êtes-vous sûr de vouloir supprimer cette vente ?')) {
-      deleteVente(id);
-      loadVentes();
-      toast.success('Vente supprimée');
+      try {
+        await api.deleteVente(id);
+        loadVentes();
+        toast.success('Vente supprimée');
+      } catch (error) {
+        console.error(error);
+        toast.error('Erreur lors de la suppression');
+      }
     }
   };
 
-  const filteredVentes = ventes.filter(vente => 
+  const filteredVentes = ventes.filter(vente =>
     (vente.acheteur?.toLowerCase() || '').includes(search.toLowerCase()) ||
     typeLabels[vente.typeAnimal].toLowerCase().includes(search.toLowerCase())
   );
@@ -310,8 +324,8 @@ const Ventes = () => {
                   </tr>
                 ) : (
                   filteredVentes.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((vente, index) => (
-                    <tr 
-                      key={vente.id} 
+                    <tr
+                      key={vente.id}
                       className="hover:bg-muted/30 transition-colors animate-fade-in"
                       style={{ animationDelay: `${index * 0.05}s` }}
                     >
@@ -325,7 +339,7 @@ const Ventes = () => {
                       <td className="py-4 px-6 text-muted-foreground">{vente.acheteur || '-'}</td>
                       <td className="py-4 px-6 text-right">
                         <div className="flex justify-end gap-2">
-                           <Button
+                          <Button
                             variant="ghost"
                             size="icon"
                             onClick={() => handleEdit(vente)}

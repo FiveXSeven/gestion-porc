@@ -1,0 +1,232 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Truie {
+  id             String   @id @default(cuid())
+  identification String   @unique
+  dateEntree     DateTime
+  dateNaissance  DateTime
+  poids          Float
+  statut         String   // 'active' | 'gestante' | 'allaitante' | 'reformee' | 'vendue'
+  notes          String   @default("")
+  archived       Boolean  @default(false)
+  archivedAt     DateTime?
+  
+  saillies       Saillie[]
+  misesBas       MiseBas[]
+  portees        Portee[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+
+
+model Saillie {
+  id                 String   @id @default(cuid())
+  truieId            String
+  truie              Truie    @relation(fields: [truieId], references: [id])
+  date               DateTime
+  methode            String   // 'naturelle' | 'insemination'
+  employe            String
+  datePrevueMiseBas  DateTime
+  statut             String   // 'en_cours' | 'confirmee' | 'echouee'
+  
+  miseBas            MiseBas?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model MiseBas {
+  id           String   @id @default(cuid())
+  saillieId    String   @unique
+  saillie      Saillie  @relation(fields: [saillieId], references: [id])
+  truieId      String
+  truie        Truie    @relation(fields: [truieId], references: [id])
+  date         DateTime
+  nesVivants   Int
+  mortNes      Int
+  poidsMoyen   Float
+  notes        String   @default("")
+  
+  portee       Portee?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Portee {
+  id            String   @id @default(cuid())
+  miseBasId     String   @unique
+  miseBas       MiseBas  @relation(fields: [miseBasId], references: [id])
+  truieId       String
+  truie         Truie    @relation(fields: [truieId], references: [id])
+  nombreActuel  Int
+  dateSevrage   DateTime?
+  poidsSevrage  Float?
+  statut        String   // 'allaitement' | 'sevree' | 'transferee'
+  
+  lotsEngraissement LotEngraissement[]
+  lotsPostSevrage LotPostSevrage[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Vente {
+  id            String   @id @default(cuid())
+  date          DateTime
+  typeAnimal    String   // 'porcelet' | 'porc_engraissement' | 'truie_reforme' | 'verrat_reforme'
+  quantite      Int
+  poidsTotal    Float
+  prixUnitaire  Float
+  prixTotal     Float
+  acheteur      String
+  notes         String   @default("")
+  createdAt     DateTime @default(now())
+}
+
+model Depense {
+  id            String   @id @default(cuid())
+  date          DateTime
+  categorie     String   // 'alimentation' | 'sante' | 'materiel' | 'main_oeuvre' | 'infrastructure' | 'autre'
+  montant       Float
+  description   String
+  fournisseur   String
+  createdAt     DateTime @default(now())
+}
+
+model Alert {
+  id        String   @id @default(cuid())
+  type      String   // 'mise_bas' | 'sevrage' | 'vente' | 'sante' | 'post_sevrage_pret' | 'engraissement_pret'
+  message   String
+  date      DateTime
+  read      Boolean  @default(false)
+  relatedId String?
+  createdAt DateTime @default(now())
+}
+
+model LotEngraissement {
+  id             String   @id @default(cuid())
+  identification String   @unique
+  dateCreation   DateTime
+  origine        String   // 'sevrage' | 'achat' | 'post-sevrage'
+  porteeId       String?
+  portee         Portee?  @relation(fields: [porteeId], references: [id])
+  nombreInitial  Int
+  nombreActuel   Int
+  poidsEntree    Float
+  dateEntree     DateTime
+  poidsCible     Float
+  statut         String   // 'en_cours' | 'vendu' | 'partiel' | 'pret'
+  notes          String   @default("")
+  
+  pesees         Pesee[]
+  mortalites     Mortalite[]
+  consommations  ConsommationAliment[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Pesee {
+  id                 String   @id @default(cuid())
+  lotEngraissementId String?
+  lotEngraissement   LotEngraissement? @relation(fields: [lotEngraissementId], references: [id])
+  lotPostSevrageId   String?
+  lotPostSevrage     LotPostSevrage?   @relation(fields: [lotPostSevrageId], references: [id])
+  date               DateTime
+  poidsMoyen         Float
+  nombrePeses        Int
+  notes              String   @default("")
+  createdAt          DateTime @default(now())
+}
+
+model StockAliment {
+  id            String   @id @default(cuid())
+  nom           String
+  type          String
+  quantite      Float    // Nombre de sacs
+  poidsSac      Float    // 25 or 40
+  dateMiseAJour DateTime
+  consommations ConsommationAliment[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model LotPostSevrage {
+  id             String   @id @default(cuid())
+  identification String   @unique
+  dateCreation   DateTime
+  origine        String   // 'sevrage' | 'achat'
+  porteeId       String?
+  portee         Portee?  @relation(fields: [porteeId], references: [id])
+  nombreInitial  Int
+  nombreActuel   Int
+  poidsEntree    Float
+  dateEntree     DateTime
+  poidsCible     Float
+  statut         String   // 'en_cours' | 'transfere' | 'vendu' | 'partiel' | 'pret'
+  notes          String   @default("")
+  
+  pesees         Pesee[]
+  mortalites     Mortalite[]
+  consommations  ConsommationAliment[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Mortalite {
+  id                 String   @id @default(cuid())
+  date               DateTime
+  nombre             Int
+  cause              String   // 'maladie' | 'accident' | 'faiblesse' | 'autre'
+  notes              String   @default("")
+  lotEngraissementId String?
+  lotEngraissement   LotEngraissement? @relation(fields: [lotEngraissementId], references: [id])
+  lotPostSevrageId   String?
+  lotPostSevrage     LotPostSevrage?   @relation(fields: [lotPostSevrageId], references: [id])
+  createdAt          DateTime @default(now())
+}
+
+model ConsommationAliment {
+  id                 String   @id @default(cuid())
+  date               DateTime
+  quantiteSacs       Float
+  stockAlimentId     String
+  stockAliment       StockAliment @relation(fields: [stockAlimentId], references: [id])
+  lotEngraissementId String?
+  lotEngraissement   LotEngraissement? @relation(fields: [lotEngraissementId], references: [id])
+  lotPostSevrageId   String?
+  lotPostSevrage     LotPostSevrage?   @relation(fields: [lotPostSevrageId], references: [id])
+  notes              String   @default("")
+  createdAt          DateTime @default(now())
+}
+
+model Vaccination {
+  id          String   @id @default(cuid())
+  date        DateTime
+  nom         String
+  type        String   // 'obligatoire' | 'preventif' | 'curatif'
+  lotType     String   // 'post-sevrage' | 'engraissement' | 'truie'
+  lotId       String?
+  truieId     String?
+  dateRappel  DateTime?
+  notes       String   @default("")
+  createdAt   DateTime @default(now())
+}
+
+model Traitement {
+  id          String   @id @default(cuid())
+  date        DateTime
+  nom         String
+  medicament  String
+  dureeJours  Int
+  lotType     String   // 'post-sevrage' | 'engraissement' | 'truie'
+  lotId       String?
+  truieId     String?
+  notes       String   @default("")
+  createdAt   DateTime @default(now())
+}

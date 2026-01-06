@@ -5,37 +5,41 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { getLots, addLot, getPeseesForLot, addPesee, updateLot } from '@/lib/storage';
-import { LotEngraissement, Pesee } from '@/types';
-import { Plus, Scale, TrendingUp, Calendar, Target, Eye, Search, Edit2, Trash2 } from 'lucide-react';
+import * as api from '@/lib/api';
+import { LotEngraissement, Pesee, Mortalite } from '@/types';
+import { Plus, Scale, TrendingUp, Calendar, Target, Eye, Search, Edit2, Trash2, CheckCircle, Skull } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { deleteLot } from '@/lib/storage';
 
 const statusLabels: Record<LotEngraissement['statut'], string> = {
   en_cours: 'En cours',
   vendu: 'Vendu',
   partiel: 'Vente partielle',
+  pret: 'Prêt',
+  termine: 'Terminé',
 };
 
 const statusColors: Record<LotEngraissement['statut'], string> = {
   en_cours: 'bg-info/10 text-info border-info/20',
   vendu: 'bg-success/10 text-success border-success/20',
   partiel: 'bg-warning/10 text-warning border-warning/20',
+  pret: 'bg-green-500/10 text-green-500 border-green-500/20',
+  termine: 'bg-emerald-600/10 text-emerald-600 border-emerald-600/20',
 };
 
 const Engraissement = () => {
   const [lots, setLots] = useState<LotEngraissement[]>([]);
+  const [pesees, setPesees] = useState<Pesee[]>([]);
   const [isLotDialogOpen, setIsLotDialogOpen] = useState(false);
   const [isPeseeDialogOpen, setIsPeseeDialogOpen] = useState(false);
   const [selectedLotId, setSelectedLotId] = useState<string | null>(null);
   const [detailLot, setDetailLot] = useState<LotEngraissement | null>(null);
   const [search, setSearch] = useState('');
   const [editingLot, setEditingLot] = useState<LotEngraissement | null>(null);
-  
+
   const [lotFormData, setLotFormData] = useState({
     identification: '',
     dateEntree: '',
@@ -53,12 +57,32 @@ const Engraissement = () => {
     notes: '',
   });
 
+  // Mortality state
+  const [isMortaliteDialogOpen, setIsMortaliteDialogOpen] = useState(false);
+  const [mortaliteLot, setMortaliteLot] = useState<LotEngraissement | null>(null);
+  const [mortaliteFormData, setMortaliteFormData] = useState({
+    date: new Date().toISOString().split('T')[0],
+    nombre: '',
+    cause: 'maladie' as Mortalite['cause'],
+    notes: '',
+  });
+
   useEffect(() => {
-    loadLots();
+    loadData();
   }, []);
 
-  const loadLots = () => {
-    setLots(getLots());
+  const loadData = async () => {
+    try {
+      const [lotsData, peseesData] = await Promise.all([
+        api.getLotsEngraissement(),
+        api.getPesees()
+      ]);
+      setLots(lotsData);
+      setPesees(peseesData);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors du chargement des données');
+    }
   };
 
   const resetLotForm = () => {
@@ -83,9 +107,9 @@ const Engraissement = () => {
     });
   };
 
-  const handleLotSubmit = (e: React.FormEvent) => {
+  const handleLotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!lotFormData.identification || !lotFormData.dateEntree || !lotFormData.nombreInitial || !lotFormData.poidsEntree) {
       toast.error('Veuillez remplir tous les champs obligatoires');
       return;
@@ -93,59 +117,71 @@ const Engraissement = () => {
 
     const nombreInitial = parseInt(lotFormData.nombreInitial);
     const poidsEntree = parseFloat(lotFormData.poidsEntree);
+    const poidsCible = parseFloat(lotFormData.poidsCible) || 115;
 
-    if (editingLot) {
-      updateLot(editingLot.id, {
-        identification: lotFormData.identification,
-        origine: lotFormData.origine,
-        dateEntree: lotFormData.dateEntree,
-        nombreInitial,
-        poidsEntree,
-        poidsCible: parseFloat(lotFormData.poidsCible) || 115,
-        notes: lotFormData.notes,
-      });
-      toast.success('Lot modifié avec succès');
-    } else {
-      const newLot: LotEngraissement = {
-        id: Date.now().toString(),
-        identification: lotFormData.identification,
-        dateCreation: new Date().toISOString().split('T')[0],
-        origine: lotFormData.origine,
-        nombreInitial,
-        nombreActuel: nombreInitial,
-        poidsEntree,
-        dateEntree: lotFormData.dateEntree,
-        poidsCible: parseFloat(lotFormData.poidsCible) || 115,
-        statut: 'en_cours',
-        notes: lotFormData.notes,
-      };
-      
-      addLot(newLot);
-  
-      // Add initial weighing
-      const initialPesee: Pesee = {
-        id: (Date.now() + 1).toString(),
-        lotId: newLot.id,
-        date: lotFormData.dateEntree,
-        poidsMoyen: poidsEntree,
-        nombrePeses: nombreInitial,
-        notes: 'Pesée d\'entrée',
-      };
-      addPesee(initialPesee);
-  
-      toast.success('Lot créé avec succès');
+    // ERREUR #6: Valider que le poids cible est supérieur au poids d'entrée
+    if (poidsCible <= poidsEntree) {
+      toast.error('Le poids cible doit être supérieur au poids d\'entrée');
+      return;
     }
 
-    loadLots();
-    setIsLotDialogOpen(false);
-    resetLotForm();
+    try {
+      if (editingLot) {
+        await api.updateLotEngraissement(editingLot.id, {
+          identification: lotFormData.identification,
+          origine: lotFormData.origine,
+          dateEntree: lotFormData.dateEntree,
+          nombreInitial,
+          poidsEntree,
+          poidsCible,
+          notes: lotFormData.notes,
+        });
+        toast.success('Lot modifié avec succès');
+      } else {
+        const newLot: LotEngraissement = {
+          id: '',
+          identification: lotFormData.identification,
+          dateCreation: new Date().toISOString().split('T')[0],
+          origine: lotFormData.origine,
+          nombreInitial,
+          nombreActuel: nombreInitial,
+          poidsEntree,
+          dateEntree: lotFormData.dateEntree,
+          poidsCible,
+          statut: 'en_cours',
+          notes: lotFormData.notes,
+        };
+
+        const createdLot = await api.addLotEngraissement(newLot);
+
+        // Add initial weighing
+        const initialPesee: Pesee = {
+          id: '',
+          lotId: createdLot.id,
+          date: lotFormData.dateEntree,
+          poidsMoyen: poidsEntree,
+          nombrePeses: nombreInitial,
+          notes: 'Pesée d\'entrée',
+        };
+        await api.addPesee(initialPesee);
+
+        toast.success('Lot créé avec succès');
+      }
+
+      loadData();
+      setIsLotDialogOpen(false);
+      resetLotForm();
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de l\'enregistrement');
+    }
   };
 
   const handleEdit = (lot: LotEngraissement) => {
     setEditingLot(lot);
     setLotFormData({
       identification: lot.identification,
-      dateEntree: lot.dateEntree,
+      dateEntree: lot.dateEntree.split('T')[0],
       origine: lot.origine,
       nombreInitial: lot.nombreInitial.toString(),
       poidsEntree: lot.poidsEntree.toString(),
@@ -155,21 +191,94 @@ const Engraissement = () => {
     setIsLotDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Êtes-vous sûr de vouloir supprimer ce lot ?')) {
-      deleteLot(id);
-      loadLots();
-      toast.success('Lot supprimé');
+      try {
+        await api.deleteLotEngraissement(id);
+        loadData();
+        toast.success('Lot supprimé');
+      } catch (error) {
+        console.error(error);
+        toast.error('Erreur lors de la suppression');
+      }
     }
   };
 
-  const filteredLots = lots.filter(lot => 
+  const handleMarkTermine = async (lot: LotEngraissement) => {
+    if (confirm(`Confirmer que le lot ${lot.identification} est terminé ?`)) {
+      try {
+        await api.updateLotEngraissement(lot.id, { statut: 'termine' });
+        
+        // Create alert for termination
+        await api.addAlert({
+          id: '',
+          type: 'vente',
+          message: `Lot d'engraissement ${lot.identification} terminé: ${lot.nombreActuel} porcs`,
+          date: new Date().toISOString(),
+          read: false,
+          relatedId: lot.id,
+        });
+        
+        loadData();
+        toast.success('Lot marqué comme terminé');
+      } catch (error) {
+        console.error(error);
+        toast.error('Erreur lors de la mise à jour');
+      }
+    }
+  };
+
+  // Mortality handlers
+  const openMortaliteDialog = (lot: LotEngraissement) => {
+    setMortaliteLot(lot);
+    setMortaliteFormData({
+      date: new Date().toISOString().split('T')[0],
+      nombre: '',
+      cause: 'maladie',
+      notes: '',
+    });
+    setIsMortaliteDialogOpen(true);
+  };
+
+  const handleMortaliteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mortaliteLot || !mortaliteFormData.nombre) {
+      toast.error('Veuillez saisir le nombre');
+      return;
+    }
+
+    const nombre = parseInt(mortaliteFormData.nombre);
+    if (nombre > mortaliteLot.nombreActuel) {
+      toast.error('Le nombre ne peut pas dépasser le nombre actuel');
+      return;
+    }
+
+    try {
+      await api.addMortalite({
+        id: '',
+        date: mortaliteFormData.date,
+        nombre,
+        cause: mortaliteFormData.cause,
+        notes: mortaliteFormData.notes,
+        lotEngraissementId: mortaliteLot.id,
+      });
+
+      toast.success('Mortalité enregistrée');
+      setIsMortaliteDialogOpen(false);
+      loadData();
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de l\'enregistrement');
+    }
+  };
+
+  const filteredLots = lots.filter(lot =>
     lot.identification.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handlePeseeSubmit = (e: React.FormEvent) => {
+  const handlePeseeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!selectedLotId || !peseeFormData.date || !peseeFormData.poidsMoyen) {
       toast.error('Veuillez remplir tous les champs obligatoires');
       return;
@@ -178,25 +287,30 @@ const Engraissement = () => {
     const lot = lots.find(l => l.id === selectedLotId);
     if (!lot) return;
 
-    const newPesee: Pesee = {
-      id: Date.now().toString(),
-      lotId: selectedLotId,
-      date: peseeFormData.date,
-      poidsMoyen: parseFloat(peseeFormData.poidsMoyen),
-      nombrePeses: parseInt(peseeFormData.nombrePeses) || lot.nombreActuel,
-      notes: peseeFormData.notes,
-    };
-    
-    addPesee(newPesee);
-    toast.success('Pesée enregistrée');
-    loadLots();
-    setIsPeseeDialogOpen(false);
-    resetPeseeForm();
-    setSelectedLotId(null);
+    try {
+      const newPesee: Pesee = {
+        id: '',
+        lotId: selectedLotId,
+        date: peseeFormData.date,
+        poidsMoyen: parseFloat(peseeFormData.poidsMoyen),
+        nombrePeses: parseInt(peseeFormData.nombrePeses) || lot.nombreActuel,
+        notes: peseeFormData.notes,
+      };
 
-    // Update detail view if open
-    if (detailLot && detailLot.id === selectedLotId) {
-      setDetailLot(lot);
+      await api.addPesee(newPesee);
+      toast.success('Pesée enregistrée');
+      loadData();
+      setIsPeseeDialogOpen(false);
+      resetPeseeForm();
+      setSelectedLotId(null);
+
+      // Update detail view if open
+      if (detailLot && detailLot.id === selectedLotId) {
+        setDetailLot(lot);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de l\'enregistrement de la pesée');
     }
   };
 
@@ -209,38 +323,45 @@ const Engraissement = () => {
     setIsPeseeDialogOpen(true);
   };
 
-  const calculateGMQ = (lot: LotEngraissement): number | null => {
-    const pesees = getPeseesForLot(lot.id);
-    if (pesees.length < 2) return null;
+  const getPeseesForLot = (lotId: string) => {
+    return pesees.filter(p => p.lotId === lotId).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  };
 
-    const firstPesee = pesees[0];
-    const lastPesee = pesees[pesees.length - 1];
+  const calculateGMQ = (lot: LotEngraissement): number | null => {
+    const lotPesees = getPeseesForLot(lot.id);
+    if (lotPesees.length < 2) return null;
+
+    const firstPesee = lotPesees[0];
+    const lastPesee = lotPesees[lotPesees.length - 1];
     const days = differenceInDays(new Date(lastPesee.date), new Date(firstPesee.date));
-    
+
     if (days === 0) return null;
-    
+
     return Math.round(((lastPesee.poidsMoyen - firstPesee.poidsMoyen) / days) * 1000) / 1000;
   };
 
   const calculateDaysToTarget = (lot: LotEngraissement): number | null => {
-    const pesees = getPeseesForLot(lot.id);
-    if (pesees.length === 0) return null;
+    const lotPesees = getPeseesForLot(lot.id);
+    if (lotPesees.length === 0) return null;
 
-    const lastPesee = pesees[pesees.length - 1];
+    const lastPesee = lotPesees[lotPesees.length - 1];
+    
+    // If current weight >= target, return 0 (target reached!)
+    if (lastPesee.poidsMoyen >= lot.poidsCible) return 0;
+    
     const gmq = calculateGMQ(lot);
-    
+
+    // If no GMQ available, we can't estimate days but we know target not reached
     if (!gmq || gmq <= 0) return null;
-    
+
     const remainingWeight = lot.poidsCible - lastPesee.poidsMoyen;
-    if (remainingWeight <= 0) return 0;
-    
     return Math.ceil(remainingWeight / gmq);
   };
 
   const getLastWeight = (lotId: string): number | null => {
-    const pesees = getPeseesForLot(lotId);
-    if (pesees.length === 0) return null;
-    return pesees[pesees.length - 1].poidsMoyen;
+    const lotPesees = getPeseesForLot(lotId);
+    if (lotPesees.length === 0) return null;
+    return lotPesees[lotPesees.length - 1].poidsMoyen;
   };
 
   const lotsEnCours = lots.filter(l => l.statut === 'en_cours');
@@ -248,8 +369,8 @@ const Engraissement = () => {
 
   // Calculate average GMQ
   const gmqValues = lotsEnCours.map(l => calculateGMQ(l)).filter((g): g is number => g !== null);
-  const avgGMQ = gmqValues.length > 0 
-    ? Math.round((gmqValues.reduce((a, b) => a + b, 0) / gmqValues.length) * 1000) / 1000 
+  const avgGMQ = gmqValues.length > 0
+    ? Math.round((gmqValues.reduce((a, b) => a + b, 0) / gmqValues.length) * 1000) / 1000
     : null;
 
   return (
@@ -461,6 +582,78 @@ const Engraissement = () => {
           </DialogContent>
         </Dialog>
 
+        {/* Mortalite Dialog */}
+        <Dialog open={isMortaliteDialogOpen} onOpenChange={setIsMortaliteDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="font-display text-destructive">
+                Enregistrer une mortalité
+              </DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleMortaliteSubmit} className="space-y-4 mt-4">
+              <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+                Lot: {mortaliteLot?.identification} - Animaux actuels: {mortaliteLot?.nombreActuel}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="mortaliteDate">Date *</Label>
+                  <Input
+                    id="mortaliteDate"
+                    type="date"
+                    value={mortaliteFormData.date}
+                    onChange={(e) => setMortaliteFormData(prev => ({ ...prev, date: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="mortaliteNombre">Nombre décédés *</Label>
+                  <Input
+                    id="mortaliteNombre"
+                    type="number"
+                    min="1"
+                    max={mortaliteLot?.nombreActuel || 1}
+                    value={mortaliteFormData.nombre}
+                    onChange={(e) => setMortaliteFormData(prev => ({ ...prev, nombre: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="mortaliteCause">Cause</Label>
+                <Select
+                  value={mortaliteFormData.cause}
+                  onValueChange={(value) => setMortaliteFormData(prev => ({ ...prev, cause: value as Mortalite['cause'] }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="maladie">Maladie</SelectItem>
+                    <SelectItem value="accident">Accident</SelectItem>
+                    <SelectItem value="faiblesse">Faiblesse</SelectItem>
+                    <SelectItem value="autre">Autre</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="mortaliteNotes">Notes</Label>
+                <Input
+                  id="mortaliteNotes"
+                  placeholder="Notes sur l'incident..."
+                  value={mortaliteFormData.notes}
+                  onChange={(e) => setMortaliteFormData(prev => ({ ...prev, notes: e.target.value }))}
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <Button type="button" variant="outline" onClick={() => setIsMortaliteDialogOpen(false)} className="flex-1">
+                  Annuler
+                </Button>
+                <Button type="submit" variant="destructive" className="flex-1">
+                  Enregistrer
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+
         {/* Detail Dialog */}
         <Dialog open={!!detailLot} onOpenChange={(open) => !open && setDetailLot(null)}>
           <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -476,8 +669,12 @@ const Engraissement = () => {
                   {/* Info */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div className="p-3 rounded-xl bg-muted/50 text-center">
-                      <p className="text-2xl font-bold text-foreground">{detailLot.nombreActuel}</p>
-                      <p className="text-xs text-muted-foreground">Animaux</p>
+                      <p className="text-2xl font-bold text-foreground">
+                        {detailLot.nombreActuel > 0 ? detailLot.nombreActuel : detailLot.nombreInitial}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {detailLot.nombreActuel > 0 ? 'Animaux' : `Animaux (initial: ${detailLot.nombreInitial})`}
+                      </p>
                     </div>
                     <div className="p-3 rounded-xl bg-muted/50 text-center">
                       <p className="text-2xl font-bold text-foreground">{getLastWeight(detailLot.id) || detailLot.poidsEntree}</p>
@@ -502,11 +699,11 @@ const Engraissement = () => {
                         poids: p.poidsMoyen,
                       }))}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis 
-                          dataKey="date" 
+                        <XAxis
+                          dataKey="date"
                           tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
                         />
-                        <YAxis 
+                        <YAxis
                           tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
                           domain={['dataMin - 5', 'dataMax + 10']}
                         />
@@ -518,10 +715,10 @@ const Engraissement = () => {
                           }}
                           formatter={(value: number) => [`${value} kg`, 'Poids moyen']}
                         />
-                        <Line 
-                          type="monotone" 
-                          dataKey="poids" 
-                          stroke="hsl(var(--primary))" 
+                        <Line
+                          type="monotone"
+                          dataKey="poids"
+                          stroke="hsl(var(--primary))"
                           strokeWidth={3}
                           dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 5 }}
                         />
@@ -592,32 +789,33 @@ const Engraissement = () => {
                         </p>
                       </div>
                     </div>
-                    <span className={cn(
-                      "px-3 py-1 rounded-full text-xs font-medium border",
-                      statusColors[lot.statut]
-                    )}>
-                      {statusLabels[lot.statut]}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={cn(
+                        "px-3 py-1 rounded-full text-xs font-medium border",
+                        statusColors[lot.statut]
+                      )}>
+                        {statusLabels[lot.statut]}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEdit(lot)}
+                        className="h-8 w-8 text-muted-foreground hover:text-primary"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(lot.id)}
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                  
-                  <div className="flex gap-1 absolute top-6 right-6">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleEdit(lot)}
-                      className="h-8 w-8 text-muted-foreground hover:text-primary bg-card/80 backdrop-blur-sm"
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDelete(lot.id)}
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive bg-card/80 backdrop-blur-sm"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+
+
 
                   {/* Progress bar */}
                   <div className="mb-4">
@@ -626,7 +824,7 @@ const Engraissement = () => {
                       <span className="font-medium text-foreground">{lastWeight || lot.poidsEntree} / {lot.poidsCible} kg</span>
                     </div>
                     <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      <div 
+                      <div
                         className="h-full rounded-full bg-primary transition-all duration-500"
                         style={{ width: `${progress}%` }}
                       />
@@ -635,8 +833,12 @@ const Engraissement = () => {
 
                   <div className="grid grid-cols-2 gap-3 mb-4">
                     <div className="p-3 rounded-xl bg-muted/50 text-center">
-                      <p className="text-lg font-bold text-foreground">{lot.nombreActuel}</p>
-                      <p className="text-xs text-muted-foreground">Animaux</p>
+                      <p className="text-lg font-bold text-foreground">
+                        {lot.nombreActuel > 0 ? lot.nombreActuel : lot.nombreInitial}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {lot.nombreActuel > 0 ? 'Animaux' : 'Animaux (terminés)'}
+                      </p>
                     </div>
                     <div className="p-3 rounded-xl bg-success/10 text-center">
                       <p className="text-lg font-bold text-success">{gmq || '-'}</p>
@@ -653,12 +855,14 @@ const Engraissement = () => {
                     </div>
                   )}
 
-                  {daysToTarget === 0 && (
+                  {daysToTarget === 0 && lot.statut === 'en_cours' && (
                     <div className="flex items-center gap-2 text-success mb-4 p-3 rounded-xl bg-success/10">
                       <Target className="h-4 w-4" />
                       <span className="text-sm font-medium">Poids cible atteint !</span>
                     </div>
                   )}
+
+
 
                   <div className="flex gap-2">
                     <Button
@@ -670,15 +874,43 @@ const Engraissement = () => {
                       <Eye className="h-4 w-4" />
                       Détails
                     </Button>
-                    <Button
-                      size="sm"
-                      className="flex-1 gap-1"
-                      onClick={() => openPeseeDialog(lot.id)}
-                    >
-                      <Scale className="h-4 w-4" />
-                      Pesée
-                    </Button>
+                    {lot.statut === 'en_cours' && (
+                      <Button
+                        size="sm"
+                        className="flex-1 gap-1"
+                        onClick={() => openPeseeDialog(lot.id)}
+                      >
+                        <Scale className="h-4 w-4" />
+                        Pesée
+                      </Button>
+                    )}
                   </div>
+                  {lot.statut === 'en_cours' && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="w-full mt-2 gap-1"
+                      onClick={() => openMortaliteDialog(lot)}
+                    >
+                      <Skull className="h-4 w-4" />
+                      Mortalité
+                    </Button>
+                  )}
+
+                  {/* Terminer button when target weight is reached */}
+                  {lot.statut === 'en_cours' && daysToTarget !== null && daysToTarget <= 0 && (
+                    <Button
+                      variant="success"
+                      size="sm"
+                      className="w-full mt-2 gap-1"
+                      onClick={() => handleMarkTermine(lot)}
+                    >
+                      <CheckCircle className="h-4 w-4" />
+                      Confirmer Terminé
+                    </Button>
+                  )}
+
+
                 </div>
               );
             })

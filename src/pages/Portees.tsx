@@ -5,9 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { getPortees, getMisesBas, getTruies, addMiseBas, addPortee, getSaillies, updateTruie, updateSaillie, updatePortee, deletePortee, updateMiseBas, deleteMiseBas, addLotPostSevrage, addPesee } from '@/lib/storage';
+import * as api from '@/lib/api';
 import { Portee, MiseBas, Truie, Saillie, LotPostSevrage, Pesee } from '@/types';
-import { Plus, Baby, Scale, Search, Edit2, Trash2, ArrowRight } from 'lucide-react';
+import { Plus, PiggyBank, Scale, Search, Edit2, Trash2, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -57,11 +57,22 @@ const Portees = () => {
     loadData();
   }, []);
 
-  const loadData = () => {
-    setPortees(getPortees());
-    setMisesBas(getMisesBas());
-    setTruies(getTruies());
-    setSaillies(getSaillies());
+  const loadData = async () => {
+    try {
+      const [porteesData, misesBasData, truiesData, sailliesData] = await Promise.all([
+        api.getPortees(),
+        api.getMisesBas(),
+        api.getTruies(),
+        api.getSaillies()
+      ]);
+      setPortees(porteesData);
+      setMisesBas(misesBasData);
+      setTruies(truiesData);
+      setSaillies(sailliesData);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors du chargement des données');
+    }
   };
 
   const resetForm = () => {
@@ -77,9 +88,9 @@ const Portees = () => {
   };
 
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.saillieId || !formData.date || !formData.nesVivants) {
       toast.error('Veuillez remplir tous les champs obligatoires');
       return;
@@ -88,140 +99,198 @@ const Portees = () => {
     const saillie = saillies.find(s => s.id === formData.saillieId);
     if (!saillie) return;
 
-    if (editingPortee) {
-      // Update existing
-      const miseBas = misesBas.find(m => m.id === editingPortee.miseBasId);
-      if (miseBas) {
-        updateMiseBas(miseBas.id, {
+    try {
+      if (editingPortee) {
+        // Update existing
+        const miseBas = misesBas.find(m => m.id === editingPortee.miseBasId);
+        if (miseBas) {
+          await api.updateMiseBas(miseBas.id, {
+            date: formData.date,
+            nesVivants: parseInt(formData.nesVivants),
+            mortNes: parseInt(formData.mortNes) || 0,
+            poidsMoyen: parseFloat(formData.poidsMoyen) || 0,
+            notes: formData.notes,
+          });
+        }
+
+        await api.updatePortee(editingPortee.id, {
+          nombreActuel: parseInt(formData.nesVivants), // Resetting to new count if corrected
+        });
+
+        toast.success('Portée modifiée avec succès');
+      } else {
+        // Create new
+        const newMiseBasData: MiseBas = {
+          id: '',
+          saillieId: formData.saillieId,
+          truieId: saillie.truieId,
           date: formData.date,
           nesVivants: parseInt(formData.nesVivants),
           mortNes: parseInt(formData.mortNes) || 0,
           poidsMoyen: parseFloat(formData.poidsMoyen) || 0,
           notes: formData.notes,
-        });
+        };
+
+        const createdMiseBas = await api.addMiseBas(newMiseBasData);
+
+        const newPorteeData: Portee = {
+          id: '',
+          miseBasId: createdMiseBas.id,
+          truieId: saillie.truieId,
+          nombreActuel: parseInt(formData.nesVivants),
+          dateSevrage: null,
+          poidsSevrage: null,
+          statut: 'allaitement',
+        };
+
+        await api.addPortee(newPorteeData);
+
+        // Update truie and saillie status
+        await api.updateTruie(saillie.truieId, { statut: 'allaitante' });
+        await api.updateSaillie(formData.saillieId, { statut: 'confirmee' });
+
+        toast.success('Mise bas enregistrée avec succès');
       }
-      
-      updatePortee(editingPortee.id, {
-        nombreActuel: parseInt(formData.nesVivants), // Resetting to new count if corrected
-      });
-      
-      toast.success('Portée modifiée avec succès');
-    } else {
-      // Create new
-      const newMiseBas: MiseBas = {
-        id: Date.now().toString(),
-        saillieId: formData.saillieId,
-        truieId: saillie.truieId,
-        date: formData.date,
-        nesVivants: parseInt(formData.nesVivants),
-        mortNes: parseInt(formData.mortNes) || 0,
-        poidsMoyen: parseFloat(formData.poidsMoyen) || 0,
-        notes: formData.notes,
-      };
-      
-      addMiseBas(newMiseBas);
-
-      const newPortee: Portee = {
-        id: (Date.now() + 1).toString(),
-        miseBasId: newMiseBas.id,
-        truieId: saillie.truieId,
-        nombreActuel: parseInt(formData.nesVivants),
-        dateSevrage: null,
-        poidsSevrage: null,
-        statut: 'allaitement',
-      };
-      
-      addPortee(newPortee);
-
-      // Update truie and saillie status
-      updateTruie(saillie.truieId, { statut: 'allaitante' });
-      updateSaillie(formData.saillieId, { statut: 'confirmee' });
-      
-      toast.success('Mise bas enregistrée avec succès');
+      loadData();
+      setIsDialogOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de l\'enregistrement');
     }
-    loadData();
-    setIsDialogOpen(false);
-    resetForm();
+  };
+
+  // ERREUR #19: Calculer l'estimation de date de sevrage (21-28 jours après naissance)
+  const getSevrageEstimation = (portee: Portee) => {
+    const miseBas = misesBas.find(m => m.id === portee.miseBasId);
+    if (!miseBas) return null;
+    const naissance = new Date(miseBas.date);
+    const sevrageMin = new Date(naissance.getTime() + 21 * 24 * 60 * 60 * 1000);
+    const sevrageMax = new Date(naissance.getTime() + 28 * 24 * 60 * 60 * 1000);
+    return { sevrageMin, sevrageMax, naissance };
   };
 
   const openSevrageDialog = (portee: Portee) => {
+    const miseBas = misesBas.find(m => m.id === portee.miseBasId);
+    // Pre-fill poidsTotal: nombreActuel × poidsMoyen
+    const estimatedWeight = miseBas ? (portee.nombreActuel * miseBas.poidsMoyen).toFixed(1) : '';
+    
+    // ERREUR #19: Pré-remplir avec la date estimée de sevrage (21 jours)
+    const estimation = getSevrageEstimation(portee);
+    const suggestedDate = estimation ? estimation.sevrageMin.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+    
     setSevragePortee(portee);
     setSevrageFormData({
-      date: new Date().toISOString().split('T')[0],
-      poidsTotal: '',
+      date: suggestedDate,
+      poidsTotal: estimatedWeight,
       nombreSevles: portee.nombreActuel.toString(),
       createLot: true,
     });
     setIsSevrageDialogOpen(true);
   };
 
-  const handleSevrageSubmit = (e: React.FormEvent) => {
+  const handleSevrageSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!sevragePortee || !sevrageFormData.date || !sevrageFormData.poidsTotal || !sevrageFormData.nombreSevles) {
       toast.error('Veuillez remplir tous les champs obligatoires');
       return;
     }
 
+    // ERREUR #14: Valider que la date de sevrage est après la mise bas
+    const miseBas = misesBas.find(m => m.id === sevragePortee.miseBasId);
+    if (miseBas) {
+      const sevrageDate = new Date(sevrageFormData.date);
+      const miseBasDate = new Date(miseBas.date);
+      if (sevrageDate < miseBasDate) {
+        toast.error('La date de sevrage doit être après la date de mise bas');
+        return;
+      }
+    }
+
     const truie = truies.find(t => t.id === sevragePortee.truieId);
-    
-    // 1. Update Portee
-    updatePortee(sevragePortee.id, {
-      dateSevrage: sevrageFormData.date,
-      poidsSevrage: parseFloat(sevrageFormData.poidsTotal),
-      nombreActuel: parseInt(sevrageFormData.nombreSevles), // Update current count to weaned count
-      statut: 'sevree',
-    });
 
-    // 2. Update Truie status
-    if (truie) {
-      updateTruie(truie.id, { statut: 'active' }); // Back to active (ready for new cycle)
+    try {
+      // 1. Update Portee
+      await api.updatePortee(sevragePortee.id, {
+        dateSevrage: sevrageFormData.date,
+        poidsSevrage: parseFloat(sevrageFormData.poidsTotal),
+        nombreActuel: parseInt(sevrageFormData.nombreSevles), // Update current count to weaned count
+        statut: 'sevree',
+      });
+
+      // 2. Update Truie status
+      if (truie) {
+        await api.updateTruie(truie.id, { statut: 'active' }); // Back to active (ready for new cycle)
+      }
+
+      // 3. Create Post-Sevrage Lot if requested
+      if (sevrageFormData.createLot) {
+        const weanedCount = parseInt(sevrageFormData.nombreSevles);
+        const totalWeight = parseFloat(sevrageFormData.poidsTotal);
+        const avgWeight = Math.round((totalWeight / weanedCount) * 100) / 100;
+
+        const newLotData: LotPostSevrage = {
+          id: '',
+          identification: `LOT-${truie ? truie.identification : 'UNK'}-${format(new Date(), 'ddMMyy')}`,
+          dateCreation: new Date().toISOString().split('T')[0],
+          origine: 'sevrage',
+          porteeId: sevragePortee.id,
+          nombreInitial: weanedCount,
+          nombreActuel: weanedCount,
+          poidsEntree: avgWeight,
+          dateEntree: sevrageFormData.date,
+          poidsCible: 25, // Default target for PS
+          statut: 'en_cours',
+          notes: `Sevrage de ${truie?.identification}`,
+        };
+
+        const createdLot = await api.addLotPostSevrage(newLotData);
+
+        // Add initial weighing
+        const initialPeseeData: Pesee = {
+          id: '',
+          lotId: createdLot.id,
+          date: sevrageFormData.date,
+          poidsMoyen: avgWeight,
+          nombrePeses: weanedCount,
+          notes: 'Pesée de sevrage',
+        };
+        await api.addPesee(initialPeseeData);
+
+        // Create alert for sevrage completion
+        await api.addAlert({
+          id: '',
+          type: 'sevrage',
+          message: `Portée de ${truie?.identification} sevrée: ${weanedCount} porcelets, lot ${createdLot.identification} créé`,
+          date: new Date().toISOString(),
+          read: false,
+          relatedId: sevragePortee.id,
+        });
+
+        toast.success('Portée sevrée et lot créé avec succès');
+      } else {
+        // Create alert for sevrage without lot creation
+        await api.addAlert({
+          id: '',
+          type: 'sevrage',
+          message: `Portée de ${truie?.identification} sevrée: ${sevrageFormData.nombreSevles} porcelets`,
+          date: new Date().toISOString(),
+          read: false,
+          relatedId: sevragePortee.id,
+        });
+        toast.success('Portée sevrée avec succès');
+      }
+
+      loadData();
+      setIsSevrageDialogOpen(false);
+      setSevragePortee(null);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors du sevrage');
     }
-
-    // 3. Create Post-Sevrage Lot if requested
-    if (sevrageFormData.createLot) {
-      const weanedCount = parseInt(sevrageFormData.nombreSevles);
-      const totalWeight = parseFloat(sevrageFormData.poidsTotal);
-      const avgWeight = Math.round((totalWeight / weanedCount) * 100) / 100;
-
-      const newLot: LotPostSevrage = {
-        id: Date.now().toString(),
-        identification: `LOT-${truie ? truie.identification : 'UNK'}-${format(new Date(), 'ddMMyy')}`,
-        dateCreation: new Date().toISOString().split('T')[0],
-        origine: 'sevrage',
-        porteeId: sevragePortee.id,
-        nombreInitial: weanedCount,
-        nombreActuel: weanedCount,
-        poidsEntree: avgWeight,
-        dateEntree: sevrageFormData.date,
-        poidsCible: 25, // Default target for PS
-        statut: 'en_cours',
-        notes: `Sevrage de ${truie?.identification}`,
-      };
-
-      addLotPostSevrage(newLot);
-
-      // Add initial weighing
-      const initialPesee: Pesee = {
-        id: (Date.now() + 1).toString(),
-        lotId: newLot.id,
-        date: sevrageFormData.date,
-        poidsMoyen: avgWeight,
-        nombrePeses: weanedCount,
-        notes: 'Pesée de sevrage',
-      };
-      addPesee(initialPesee);
-      
-      toast.success('Portée sevrée et lot créé avec succès');
-    } else {
-      toast.success('Portée sevrée avec succès');
-    }
-
-    loadData();
-    setIsSevrageDialogOpen(false);
-    setSevragePortee(null);
   };
 
-  const confirmedSaillies = saillies.filter(s => 
+  const confirmedSaillies = saillies.filter(s =>
     s.statut === 'confirmee' && (!misesBas.some(m => m.saillieId === s.id) || editingPortee)
   );
 
@@ -232,7 +301,7 @@ const Portees = () => {
     setEditingPortee(portee);
     setFormData({
       saillieId: miseBas.saillieId,
-      date: miseBas.date,
+      date: miseBas.date.split('T')[0],
       nesVivants: miseBas.nesVivants.toString(),
       mortNes: miseBas.mortNes.toString(),
       poidsMoyen: miseBas.poidsMoyen.toString(),
@@ -241,14 +310,19 @@ const Portees = () => {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Êtes-vous sûr de vouloir supprimer cette portée ?')) {
       const portee = portees.find(p => p.id === id);
       if (portee) {
-        deletePortee(id);
-        deleteMiseBas(portee.miseBasId);
-        loadData();
-        toast.success('Portée supprimée');
+        try {
+          await api.deletePortee(id);
+          await api.deleteMiseBas(portee.miseBasId);
+          loadData();
+          toast.success('Portée supprimée');
+        } catch (error) {
+          console.error(error);
+          toast.error('Erreur lors de la suppression');
+        }
       }
     }
   };
@@ -376,6 +450,20 @@ const Portees = () => {
                   Sevrer la portée
                 </DialogTitle>
               </DialogHeader>
+              {/* ERREUR #19: Afficher l'estimation de date de sevrage */}
+              {sevragePortee && (() => {
+                const estimation = getSevrageEstimation(sevragePortee);
+                if (estimation) {
+                  return (
+                    <div className="bg-info/10 text-info rounded-lg p-3 text-sm">
+                      <p className="font-medium">📅 Estimation de sevrage</p>
+                      <p>Entre le {format(estimation.sevrageMin, "d MMM", { locale: fr })} et le {format(estimation.sevrageMax, "d MMM yyyy", { locale: fr })}</p>
+                      <p className="text-xs mt-1 opacity-80">(21 à 28 jours après la naissance)</p>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
               <form onSubmit={handleSevrageSubmit} className="space-y-4 mt-4">
                 <div className="space-y-2">
                   <Label htmlFor="sevrageDate">Date de sevrage *</Label>
@@ -408,10 +496,10 @@ const Portees = () => {
                     />
                   </div>
                 </div>
-                
+
                 <div className="flex items-center space-x-2 py-2">
-                  <Checkbox 
-                    id="createLot" 
+                  <Checkbox
+                    id="createLot"
                     checked={sevrageFormData.createLot}
                     onCheckedChange={(checked) => setSevrageFormData(prev => ({ ...prev, createLot: checked as boolean }))}
                   />
@@ -448,14 +536,14 @@ const Portees = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filteredPortees.length === 0 ? (
             <div className="col-span-full text-center py-16 bg-card rounded-2xl border border-border">
-              <Baby className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
+              <PiggyBank className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
               <p className="text-muted-foreground">Aucune portée enregistrée</p>
             </div>
           ) : (
             filteredPortees.map((portee, index) => {
               const miseBas = misesBas.find(m => m.id === portee.miseBasId);
               const truie = truies.find(t => t.id === portee.truieId);
-              
+
               return (
                 <div
                   key={portee.id}
@@ -465,7 +553,7 @@ const Portees = () => {
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 rounded-xl bg-info/10 flex items-center justify-center">
-                        <Baby className="h-6 w-6 text-info" />
+                        <PiggyBank className="h-6 w-6 text-info" />
                       </div>
                       <div>
                         <p className="font-semibold text-foreground">{truie?.identification}</p>
@@ -481,7 +569,7 @@ const Portees = () => {
                       {statusLabels[portee.statut]}
                     </span>
                     <div className="flex gap-1 ml-2">
-                       <Button
+                      <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => handleEdit(portee)}
@@ -499,7 +587,7 @@ const Portees = () => {
                       </Button>
                     </div>
                   </div>
-                  
+
                   <div className="grid grid-cols-2 gap-4 mb-4">
                     <div className="p-3 rounded-xl bg-muted/50 text-center">
                       <p className="text-2xl font-bold text-foreground">{portee.nombreActuel}</p>
@@ -542,16 +630,16 @@ const Portees = () => {
                   )}
 
                   {!portee.dateSevrage && (
-                     <div className="mt-4 pt-4 border-t border-border">
-                      <Button 
-                        className="w-full gap-2" 
+                    <div className="mt-4 pt-4 border-t border-border">
+                      <Button
+                        className="w-full gap-2"
                         variant="secondary"
                         onClick={() => openSevrageDialog(portee)}
                       >
                         <ArrowRight className="h-4 w-4" />
                         Sevrer la portée
                       </Button>
-                     </div>
+                    </div>
                   )}
                 </div>
               );

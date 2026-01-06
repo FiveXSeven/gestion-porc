@@ -5,11 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { getTruies, addTruie, updateTruie, deleteTruie } from '@/lib/storage';
-import { Truie } from '@/types';
-import { Plus, Search, Edit2, Trash2, PiggyBank } from 'lucide-react';
+import * as api from '@/lib/api';
+import { Truie, Saillie, MiseBas, Portee } from '@/types';
+import { Plus, Search, Edit2, Trash2, PiggyBank, Eye, Heart, Calendar, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
@@ -35,6 +35,13 @@ const Truies = () => {
   const [filterStatut, setFilterStatut] = useState<string>('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTruie, setEditingTruie] = useState<Truie | null>(null);
+  
+  // Detail view state
+  const [detailTruie, setDetailTruie] = useState<Truie | null>(null);
+  const [truieSaillies, setTruieSaillies] = useState<Saillie[]>([]);
+  const [truieMisesBas, setTruieMisesBas] = useState<MiseBas[]>([]);
+  const [truiePortees, setTruiePortees] = useState<Portee[]>([]);
+  
   const [formData, setFormData] = useState({
     identification: '',
     dateEntree: '',
@@ -48,8 +55,14 @@ const Truies = () => {
     loadTruies();
   }, []);
 
-  const loadTruies = () => {
-    setTruies(getTruies());
+  const loadTruies = async () => {
+    try {
+      const data = await api.getTruies();
+      setTruies(data);
+    } catch (error) {
+      toast.error('Erreur lors du chargement des truies');
+      console.error(error);
+    }
   };
 
   const resetForm = () => {
@@ -64,41 +77,46 @@ const Truies = () => {
     setEditingTruie(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.identification || !formData.dateEntree || !formData.poids) {
       toast.error('Veuillez remplir tous les champs obligatoires');
       return;
     }
 
-    if (editingTruie) {
-      updateTruie(editingTruie.id, {
-        ...formData,
-        poids: parseFloat(formData.poids),
-      });
-      toast.success('Truie modifiée avec succès');
-    } else {
-      const newTruie: Truie = {
-        id: Date.now().toString(),
-        ...formData,
-        poids: parseFloat(formData.poids),
-      };
-      addTruie(newTruie);
-      toast.success('Truie ajoutée avec succès');
-    }
+    try {
+      if (editingTruie) {
+        await api.updateTruie(editingTruie.id, {
+          ...formData,
+          poids: parseFloat(formData.poids),
+        });
+        toast.success('Truie modifiée avec succès');
+      } else {
+        const newTruie: Truie = {
+          id: '', // Backend will generate ID
+          ...formData,
+          poids: parseFloat(formData.poids),
+        };
+        await api.addTruie(newTruie);
+        toast.success('Truie ajoutée avec succès');
+      }
 
-    loadTruies();
-    setIsDialogOpen(false);
-    resetForm();
+      loadTruies();
+      setIsDialogOpen(false);
+      resetForm();
+    } catch (error) {
+      toast.error('Erreur lors de l\'enregistrement');
+      console.error(error);
+    }
   };
 
   const handleEdit = (truie: Truie) => {
     setEditingTruie(truie);
     setFormData({
       identification: truie.identification,
-      dateEntree: truie.dateEntree,
-      dateNaissance: truie.dateNaissance,
+      dateEntree: truie.dateEntree.split('T')[0], // Ensure format YYYY-MM-DD
+      dateNaissance: truie.dateNaissance.split('T')[0],
       poids: truie.poids.toString(),
       statut: truie.statut,
       notes: truie.notes,
@@ -106,12 +124,60 @@ const Truies = () => {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Êtes-vous sûr de vouloir supprimer cette truie ?')) {
-      deleteTruie(id);
-      loadTruies();
-      toast.success('Truie supprimée');
+      try {
+        await api.deleteTruie(id);
+        loadTruies();
+        toast.success('Truie supprimée');
+      } catch (error) {
+        toast.error('Erreur lors de la suppression');
+        console.error(error);
+      }
     }
+  };
+
+  const openDetailView = async (truie: Truie) => {
+    setDetailTruie(truie);
+    try {
+      const [sailliesData, misesBasData, porteesData] = await Promise.all([
+        api.getSaillies(),
+        api.getMisesBas(),
+        api.getPortees(),
+      ]);
+      
+      // Filter data for this truie
+      const truieSailliesFiltered = sailliesData.filter(s => s.truieId === truie.id)
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setTruieSaillies(truieSailliesFiltered);
+      
+      const truieMisesBasFiltered = misesBasData.filter(mb => 
+        truieSailliesFiltered.some(s => s.id === mb.saillieId)
+      );
+      setTruieMisesBas(truieMisesBasFiltered);
+      
+      const truiePorteesFiltered = porteesData.filter(p => 
+        truieMisesBasFiltered.some(mb => mb.id === p.miseBasId)
+      );
+      setTruiePortees(truiePorteesFiltered);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const calculatePerformanceScore = (): number => {
+    if (truieSaillies.length === 0) return 0;
+    
+    const totalNesVivants = truieMisesBas.reduce((sum, mb) => sum + mb.nesVivants, 0);
+    const avgLitterSize = truieMisesBas.length > 0 ? totalNesVivants / truieMisesBas.length : 0;
+    const fertilityRate = truieSaillies.filter(s => s.statut === 'confirmee').length / truieSaillies.length;
+    
+    // Score: 40% litter size (out of 12) + 40% fertility + 20% consistency
+    const litterScore = Math.min(avgLitterSize / 12, 1) * 40;
+    const fertilityScore = fertilityRate * 40;
+    const consistencyScore = truieMisesBas.length >= 3 ? 20 : (truieMisesBas.length / 3) * 20;
+    
+    return Math.round(litterScore + fertilityScore + consistencyScore);
   };
 
   const filteredTruies = truies.filter(truie => {
@@ -273,8 +339,8 @@ const Truies = () => {
                   </tr>
                 ) : (
                   filteredTruies.map((truie, index) => (
-                    <tr 
-                      key={truie.id} 
+                    <tr
+                      key={truie.id}
                       className="hover:bg-muted/30 transition-colors animate-fade-in"
                       style={{ animationDelay: `${index * 0.05}s` }}
                     >
@@ -306,6 +372,15 @@ const Truies = () => {
                           <Button
                             variant="ghost"
                             size="icon"
+                            onClick={() => openDetailView(truie)}
+                            className="h-9 w-9 text-muted-foreground hover:text-info"
+                            title="Voir détails"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={() => handleEdit(truie)}
                             className="h-9 w-9 text-muted-foreground hover:text-primary"
                           >
@@ -328,6 +403,112 @@ const Truies = () => {
             </table>
           </div>
         </div>
+
+        {/* Detail Dialog */}
+        <Dialog open={!!detailTruie} onOpenChange={(open) => !open && setDetailTruie(null)}>
+          <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+            {detailTruie && (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="font-display flex items-center gap-3">
+                    <PiggyBank className="h-6 w-6 text-primary" />
+                    Fiche de {detailTruie.identification}
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-6 mt-4">
+                  {/* Stats */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="p-3 rounded-xl bg-primary/10 text-center">
+                      <p className="text-2xl font-bold text-primary">{truieSaillies.length}</p>
+                      <p className="text-xs text-muted-foreground">Saillies</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-accent/10 text-center">
+                      <p className="text-2xl font-bold text-accent">{truieMisesBas.length}</p>
+                      <p className="text-xs text-muted-foreground">Mises bas</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-info/10 text-center">
+                      <p className="text-2xl font-bold text-info">
+                        {truieMisesBas.length > 0 
+                          ? Math.round(truieMisesBas.reduce((sum, mb) => sum + mb.nesVivants, 0) / truieMisesBas.length * 10) / 10
+                          : 0}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Nés vivants/portée</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-success/10 text-center">
+                      <p className="text-2xl font-bold text-success">{calculatePerformanceScore()}%</p>
+                      <p className="text-xs text-muted-foreground">Score perf.</p>
+                    </div>
+                  </div>
+
+                  {/* Info */}
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Statut</p>
+                      <span className={cn("px-2 py-1 rounded-full text-xs font-medium border", statusColors[detailTruie.statut])}>
+                        {statusLabels[detailTruie.statut]}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Poids</p>
+                      <p className="font-semibold">{detailTruie.poids} kg</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Date d'entrée</p>
+                      <p className="font-semibold">{format(new Date(detailTruie.dateEntree), "d MMM yyyy", { locale: fr })}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Date de naissance</p>
+                      <p className="font-semibold">{detailTruie.dateNaissance ? format(new Date(detailTruie.dateNaissance), "d MMM yyyy", { locale: fr }) : '-'}</p>
+                    </div>
+                  </div>
+
+                  {/* Historique des saillies */}
+                  <div>
+                    <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                      <Heart className="h-4 w-4 text-accent" />
+                      Historique des saillies ({truieSaillies.length})
+                    </h4>
+                    {truieSaillies.length === 0 ? (
+                      <p className="text-sm text-muted-foreground italic">Aucune saillie enregistrée</p>
+                    ) : (
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {truieSaillies.map(s => {
+                          const miseBas = truieMisesBas.find(mb => mb.saillieId === s.id);
+                          return (
+                            <div key={s.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                              <div>
+                                <p className="text-sm font-medium">
+                                  {format(new Date(s.date), "d MMM yyyy", { locale: fr })}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {s.statut === 'confirmee' ? '✅ Confirmée' : s.statut === 'echouee' ? '❌ Échouée' : '⏳ En attente'}
+                                </p>
+                              </div>
+                              {miseBas && (
+                                <div className="text-right">
+                                  <p className="text-sm font-semibold text-success">{miseBas.nesVivants} nés vivants</p>
+                                  <p className="text-xs text-muted-foreground">{miseBas.mortNes} mort-nés</p>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Notes */}
+                  {detailTruie.notes && (
+                    <div>
+                      <h4 className="font-semibold text-foreground mb-2">Notes</h4>
+                      <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">{detailTruie.notes}</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </MainLayout>
   );

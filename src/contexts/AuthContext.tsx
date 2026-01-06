@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from '@/types';
-import { getUser, saveUser, isAuthenticated as checkAuth, setAuthenticated, logout as doLogout, initializeDemoData } from '@/lib/storage';
+import { getUser, saveUser, isAuthenticated as checkAuth, setAuthenticated, logout as doLogout } from '@/lib/storage';
 
 interface AuthContextType {
   user: User | null;
@@ -22,7 +22,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (storedUser && authStatus) {
       setUser(storedUser);
       setAuthenticatedState(true);
-      initializeDemoData();
+      setAuthenticatedState(true);
     }
   }, []);
 
@@ -32,7 +32,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setUser(storedUser);
       setAuthenticatedState(true);
       setAuthenticated(true);
-      initializeDemoData();
+      setAuthenticated(true);
       return true;
     }
     return false;
@@ -44,7 +44,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setUser(newUser);
     setAuthenticatedState(true);
     setAuthenticated(true);
-    initializeDemoData();
+    setAuthenticated(true);
     return true;
   };
 

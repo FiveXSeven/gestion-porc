@@ -5,9 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { getLotsPostSevrage, addLotPostSevrage, getPeseesForLot, addPesee, updateLotPostSevrage, deleteLotPostSevrage, addLot } from '@/lib/storage';
-import { LotPostSevrage, Pesee, LotEngraissement } from '@/types';
-import { Plus, Scale, TrendingUp, Calendar, Target, Eye, Search, Edit2, Trash2, ArrowRight } from 'lucide-react';
+import * as api from '@/lib/api';
+import { LotPostSevrage, Pesee, LotEngraissement, Mortalite } from '@/types';
+import { Plus, Scale, TrendingUp, Calendar, Target, Eye, Search, Edit2, Trash2, ArrowRight, CheckCircle, Skull } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -20,6 +20,8 @@ const statusLabels: Record<LotPostSevrage['statut'], string> = {
   vendu: 'Vendu',
   partiel: 'Vente partielle',
   transfere: 'Transféré',
+  pret: 'Prêt',
+  termine: 'Terminé',
 };
 
 const statusColors: Record<LotPostSevrage['statut'], string> = {
@@ -27,17 +29,20 @@ const statusColors: Record<LotPostSevrage['statut'], string> = {
   vendu: 'bg-success/10 text-success border-success/20',
   partiel: 'bg-warning/10 text-warning border-warning/20',
   transfere: 'bg-purple-500/10 text-purple-500 border-purple-500/20',
+  pret: 'bg-green-500/10 text-green-500 border-green-500/20',
+  termine: 'bg-emerald-600/10 text-emerald-600 border-emerald-600/20',
 };
 
 const PostSevrage = () => {
   const [lots, setLots] = useState<LotPostSevrage[]>([]);
+  const [pesees, setPesees] = useState<Pesee[]>([]);
   const [isLotDialogOpen, setIsLotDialogOpen] = useState(false);
   const [isPeseeDialogOpen, setIsPeseeDialogOpen] = useState(false);
   const [selectedLotId, setSelectedLotId] = useState<string | null>(null);
   const [detailLot, setDetailLot] = useState<LotPostSevrage | null>(null);
   const [search, setSearch] = useState('');
   const [editingLot, setEditingLot] = useState<LotPostSevrage | null>(null);
-  
+
   const [lotFormData, setLotFormData] = useState({
     identification: '',
     dateEntree: '',
@@ -65,12 +70,32 @@ const PostSevrage = () => {
     createLot: true,
   });
 
+  // Mortality state
+  const [isMortaliteDialogOpen, setIsMortaliteDialogOpen] = useState(false);
+  const [mortaliteLot, setMortaliteLot] = useState<LotPostSevrage | null>(null);
+  const [mortaliteFormData, setMortaliteFormData] = useState({
+    date: new Date().toISOString().split('T')[0],
+    nombre: '',
+    cause: 'maladie' as Mortalite['cause'],
+    notes: '',
+  });
+
   useEffect(() => {
-    loadLots();
+    loadData();
   }, []);
 
-  const loadLots = () => {
-    setLots(getLotsPostSevrage());
+  const loadData = async () => {
+    try {
+      const [lotsData, peseesData] = await Promise.all([
+        api.getLotsPostSevrage(),
+        api.getPesees()
+      ]);
+      setLots(lotsData);
+      setPesees(peseesData);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors du chargement des données');
+    }
   };
 
   const resetLotForm = () => {
@@ -95,9 +120,9 @@ const PostSevrage = () => {
     });
   };
 
-  const handleLotSubmit = (e: React.FormEvent) => {
+  const handleLotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!lotFormData.identification || !lotFormData.dateEntree || !lotFormData.nombreInitial || !lotFormData.poidsEntree) {
       toast.error('Veuillez remplir tous les champs obligatoires');
       return;
@@ -105,59 +130,70 @@ const PostSevrage = () => {
 
     const nombreInitial = parseInt(lotFormData.nombreInitial);
     const poidsEntree = parseFloat(lotFormData.poidsEntree);
+    const poidsCible = parseFloat(lotFormData.poidsCible) || 25;
 
-    if (editingLot) {
-      updateLotPostSevrage(editingLot.id, {
-        identification: lotFormData.identification,
-        origine: lotFormData.origine,
-        dateEntree: lotFormData.dateEntree,
-        nombreInitial,
-        poidsEntree,
-        poidsCible: parseFloat(lotFormData.poidsCible) || 25,
-        notes: lotFormData.notes,
-      });
-      toast.success('Lot modifié avec succès');
-    } else {
-      const newLot: LotPostSevrage = {
-        id: Date.now().toString(),
-        identification: lotFormData.identification,
-        dateCreation: new Date().toISOString().split('T')[0],
-        origine: lotFormData.origine,
-        nombreInitial,
-        nombreActuel: nombreInitial,
-        poidsEntree,
-        dateEntree: lotFormData.dateEntree,
-        poidsCible: parseFloat(lotFormData.poidsCible) || 25,
-        statut: 'en_cours',
-        notes: lotFormData.notes,
-      };
-      
-      addLotPostSevrage(newLot);
-  
-      // Add initial weighing
-      const initialPesee: Pesee = {
-        id: (Date.now() + 1).toString(),
-        lotId: newLot.id,
-        date: lotFormData.dateEntree,
-        poidsMoyen: poidsEntree,
-        nombrePeses: nombreInitial,
-        notes: 'Pesée d\'entrée',
-      };
-      addPesee(initialPesee);
-  
-      toast.success('Lot créé avec succès');
+    // ERREUR #6: Valider que le poids cible est supérieur au poids d'entrée
+    if (poidsCible <= poidsEntree) {
+      toast.error('Le poids cible doit être supérieur au poids d\'entrée');
+      return;
     }
 
-    loadLots();
-    setIsLotDialogOpen(false);
-    resetLotForm();
+    try {
+      if (editingLot) {
+        await api.updateLotPostSevrage(editingLot.id, {
+          identification: lotFormData.identification,
+          origine: lotFormData.origine,
+          dateEntree: lotFormData.dateEntree,
+          nombreInitial,
+          poidsEntree,
+          poidsCible,
+          notes: lotFormData.notes,
+        });
+        toast.success('Lot modifié avec succès');
+      } else {
+        const newLot: LotPostSevrage = {
+          id: '',
+          identification: lotFormData.identification,
+          dateCreation: new Date().toISOString().split('T')[0],
+          origine: lotFormData.origine,
+          nombreInitial,
+          nombreActuel: nombreInitial,
+          poidsEntree,
+          dateEntree: lotFormData.dateEntree,
+          poidsCible,
+          statut: 'en_cours',
+          notes: lotFormData.notes,
+        };
+
+        const createdLot = await api.addLotPostSevrage(newLot);
+
+        // Add initial weighing
+        const initialPesee: Pesee = {
+          id: '',
+          lotId: createdLot.id,
+          date: lotFormData.dateEntree,
+          poidsMoyen: poidsEntree,
+          nombrePeses: nombreInitial,
+          notes: 'Pesée d\'entrée',
+        };
+        await api.addPesee(initialPesee);
+
+        toast.success('Lot créé avec succès');
+      }
+      loadData();
+      setIsLotDialogOpen(false);
+      resetLotForm();
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de l\'enregistrement');
+    }
   };
 
   const handleEdit = (lot: LotPostSevrage) => {
     setEditingLot(lot);
     setLotFormData({
       identification: lot.identification,
-      dateEntree: lot.dateEntree,
+      dateEntree: lot.dateEntree.split('T')[0],
       origine: lot.origine,
       nombreInitial: lot.nombreInitial.toString(),
       poidsEntree: lot.poidsEntree.toString(),
@@ -167,21 +203,50 @@ const PostSevrage = () => {
     setIsLotDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Êtes-vous sûr de vouloir supprimer ce lot ?')) {
-      deleteLotPostSevrage(id);
-      loadLots();
-      toast.success('Lot supprimé');
+      try {
+        await api.deleteLotPostSevrage(id);
+        loadData();
+        toast.success('Lot supprimé');
+      } catch (error) {
+        console.error(error);
+        toast.error('Erreur lors de la suppression');
+      }
     }
   };
 
-  const filteredLots = lots.filter(lot => 
+  const handleMarkTermine = async (lot: LotPostSevrage) => {
+    if (confirm(`Marquer le lot ${lot.identification} comme terminé (sans transfert) ?`)) {
+      try {
+        await api.updateLotPostSevrage(lot.id, { statut: 'termine' });
+        
+        // Create alert for termination
+        await api.addAlert({
+          id: '',
+          type: 'vente',
+          message: `Lot ${lot.identification} terminé: ${lot.nombreActuel} animaux`,
+          date: new Date().toISOString(),
+          read: false,
+          relatedId: lot.id,
+        });
+        
+        loadData();
+        toast.success('Lot marqué comme terminé');
+      } catch (error) {
+        console.error(error);
+        toast.error('Erreur lors de la mise à jour');
+      }
+    }
+  };
+
+  const filteredLots = lots.filter(lot =>
     lot.identification.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handlePeseeSubmit = (e: React.FormEvent) => {
+  const handlePeseeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!selectedLotId || !peseeFormData.date || !peseeFormData.poidsMoyen) {
       toast.error('Veuillez remplir tous les champs obligatoires');
       return;
@@ -190,25 +255,30 @@ const PostSevrage = () => {
     const lot = lots.find(l => l.id === selectedLotId);
     if (!lot) return;
 
-    const newPesee: Pesee = {
-      id: Date.now().toString(),
-      lotId: selectedLotId,
-      date: peseeFormData.date,
-      poidsMoyen: parseFloat(peseeFormData.poidsMoyen),
-      nombrePeses: parseInt(peseeFormData.nombrePeses) || lot.nombreActuel,
-      notes: peseeFormData.notes,
-    };
-    
-    addPesee(newPesee);
-    toast.success('Pesée enregistrée');
-    loadLots();
-    setIsPeseeDialogOpen(false);
-    resetPeseeForm();
-    setSelectedLotId(null);
+    try {
+      const newPesee: Pesee = {
+        id: '',
+        lotId: selectedLotId,
+        date: peseeFormData.date,
+        poidsMoyen: parseFloat(peseeFormData.poidsMoyen),
+        nombrePeses: parseInt(peseeFormData.nombrePeses) || lot.nombreActuel,
+        notes: peseeFormData.notes,
+      };
 
-    // Update detail view if open
-    if (detailLot && detailLot.id === selectedLotId) {
-      setDetailLot(lot);
+      await api.addPesee(newPesee);
+      toast.success('Pesée enregistrée');
+      loadData();
+      setIsPeseeDialogOpen(false);
+      resetPeseeForm();
+      setSelectedLotId(null);
+
+      // Update detail view if open
+      if (detailLot && detailLot.id === selectedLotId) {
+        setDetailLot(lot);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de l\'enregistrement de la pesée');
     }
   };
 
@@ -222,105 +292,183 @@ const PostSevrage = () => {
   };
 
   const openTransferDialog = (lot: LotPostSevrage) => {
+    // Pre-fill poidsTotal: nombreActuel × lastAverageWeight
+    const lastWeight = getLastWeight(lot.id) || lot.poidsEntree;
+    const estimatedTotal = (lot.nombreActuel * lastWeight).toFixed(1);
+    
     setTransferLot(lot);
     setTransferFormData({
       date: new Date().toISOString().split('T')[0],
-      poidsTotal: '', // User needs to weigh them before transfer
+      poidsTotal: estimatedTotal,
       nombreTransferes: lot.nombreActuel.toString(),
       createLot: true,
     });
     setIsTransferDialogOpen(true);
   };
 
-  const handleTransferSubmit = (e: React.FormEvent) => {
+  const handleTransferSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!transferLot || !transferFormData.date || !transferFormData.poidsTotal || !transferFormData.nombreTransferes) {
       toast.error('Veuillez remplir tous les champs obligatoires');
       return;
     }
 
-    // 1. Update Post-Sevrage Lot
-    updateLotPostSevrage(transferLot.id, {
-      statut: 'transfere',
-      nombreActuel: 0, // All transferred
-      notes: transferLot.notes + ` | Transféré le ${format(new Date(transferFormData.date), 'dd/MM/yyyy')}`
-    });
-
-    // 2. Create Engraissement Lot if requested
-    if (transferFormData.createLot) {
-      const transferCount = parseInt(transferFormData.nombreTransferes);
-      const totalWeight = parseFloat(transferFormData.poidsTotal);
-      const avgWeight = Math.round((totalWeight / transferCount) * 100) / 100;
-
-      const newLot: LotEngraissement = {
-        id: Date.now().toString(),
-        identification: `LOT-ENG-${transferLot.identification.replace('LOT-PS-', '')}`,
-        dateCreation: new Date().toISOString().split('T')[0],
-        origine: 'post-sevrage',
-        nombreInitial: transferCount,
-        nombreActuel: transferCount,
-        poidsEntree: avgWeight,
-        dateEntree: transferFormData.date,
-        poidsCible: 115, // Standard target for Engraissement
-        statut: 'en_cours',
-        notes: `Transfert de ${transferLot.identification}`,
-      };
-
-      addLot(newLot);
-
-      // Add initial weighing
-      const initialPesee: Pesee = {
-        id: (Date.now() + 1).toString(),
-        lotId: newLot.id,
-        date: transferFormData.date,
-        poidsMoyen: avgWeight,
-        nombrePeses: transferCount,
-        notes: 'Pesée d\'entrée (Transfert)',
-      };
-      addPesee(initialPesee);
-      
-      toast.success('Transfert effectué et lot d\'engraissement créé');
-    } else {
-      toast.success('Lot marqué comme transféré');
+    // ERREUR #15: Valider que la date de transfert est après la date d'entrée
+    const transferDate = new Date(transferFormData.date);
+    const entreeDate = new Date(transferLot.dateEntree);
+    if (transferDate < entreeDate) {
+      toast.error('La date de transfert doit être après la date d\'entrée du lot');
+      return;
     }
 
-    loadLots();
-    setIsTransferDialogOpen(false);
-    setTransferLot(null);
+    try {
+      // 1. Update Post-Sevrage Lot
+      await api.updateLotPostSevrage(transferLot.id, {
+        statut: 'transfere',
+        nombreActuel: 0, // All transferred
+        notes: (transferLot.notes || '') + ` | Transféré le ${format(new Date(transferFormData.date), 'dd/MM/yyyy')}`
+      });
+
+      // 2. Create Engraissement Lot if requested
+      if (transferFormData.createLot) {
+        const transferCount = parseInt(transferFormData.nombreTransferes);
+        const totalWeight = parseFloat(transferFormData.poidsTotal);
+        const avgWeight = Math.round((totalWeight / transferCount) * 100) / 100;
+
+        const newLot: LotEngraissement = {
+          id: '',
+          identification: `LOT-ENG-${transferLot.identification.replace('LOT-PS-', '')}`,
+          dateCreation: new Date().toISOString().split('T')[0],
+          origine: 'post-sevrage',
+          nombreInitial: transferCount,
+          nombreActuel: transferCount,
+          poidsEntree: avgWeight,
+          dateEntree: transferFormData.date,
+          poidsCible: 115, // Standard target for Engraissement
+          statut: 'en_cours',
+          notes: `Transfert de ${transferLot.identification}`,
+        };
+
+        const createdLot = await api.addLotEngraissement(newLot);
+
+        // Add initial weighing
+        const initialPesee: Pesee = {
+          id: '',
+          lotId: createdLot.id,
+          date: transferFormData.date,
+          poidsMoyen: avgWeight,
+          nombrePeses: transferCount,
+          notes: 'Pesée d\'entrée (Transfert)',
+        };
+        await api.addPesee(initialPesee);
+
+        // Create alert for transfer
+        await api.addAlert({
+          id: '',
+          type: 'vente',
+          message: `Lot ${transferLot.identification} transféré en engraissement: ${transferCount} animaux`,
+          date: new Date().toISOString(),
+          read: false,
+          relatedId: transferLot.id,
+        });
+
+        toast.success('Transfert effectué et lot d\'engraissement créé');
+      } else {
+        toast.success('Lot marqué comme transféré');
+      }
+
+      loadData();
+      setIsTransferDialogOpen(false);
+      setTransferLot(null);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors du transfert');
+    }
+  };
+
+  // Mortality handlers
+  const openMortaliteDialog = (lot: LotPostSevrage) => {
+    setMortaliteLot(lot);
+    setMortaliteFormData({
+      date: new Date().toISOString().split('T')[0],
+      nombre: '',
+      cause: 'maladie',
+      notes: '',
+    });
+    setIsMortaliteDialogOpen(true);
+  };
+
+  const handleMortaliteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mortaliteLot || !mortaliteFormData.nombre) {
+      toast.error('Veuillez saisir le nombre');
+      return;
+    }
+
+    const nombre = parseInt(mortaliteFormData.nombre);
+    if (nombre > mortaliteLot.nombreActuel) {
+      toast.error('Le nombre ne peut pas dépasser le nombre actuel');
+      return;
+    }
+
+    try {
+      await api.addMortalite({
+        id: '',
+        date: mortaliteFormData.date,
+        nombre,
+        cause: mortaliteFormData.cause,
+        notes: mortaliteFormData.notes,
+        lotPostSevrageId: mortaliteLot.id,
+      });
+
+      toast.success('Mortalité enregistrée');
+      setIsMortaliteDialogOpen(false);
+      loadData();
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de l\'enregistrement');
+    }
+  };
+
+  const getPeseesForLot = (lotId: string) => {
+    return pesees.filter(p => p.lotId === lotId).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   };
 
   const calculateGMQ = (lot: LotPostSevrage): number | null => {
-    const pesees = getPeseesForLot(lot.id);
-    if (pesees.length < 2) return null;
+    const lotPesees = getPeseesForLot(lot.id);
+    if (lotPesees.length < 2) return null;
 
-    const firstPesee = pesees[0];
-    const lastPesee = pesees[pesees.length - 1];
+    const firstPesee = lotPesees[0];
+    const lastPesee = lotPesees[lotPesees.length - 1];
     const days = differenceInDays(new Date(lastPesee.date), new Date(firstPesee.date));
-    
+
     if (days === 0) return null;
-    
+
     return Math.round(((lastPesee.poidsMoyen - firstPesee.poidsMoyen) / days) * 1000) / 1000;
   };
 
   const calculateDaysToTarget = (lot: LotPostSevrage): number | null => {
-    const pesees = getPeseesForLot(lot.id);
-    if (pesees.length === 0) return null;
+    const lotPesees = getPeseesForLot(lot.id);
+    if (lotPesees.length === 0) return null;
 
-    const lastPesee = pesees[pesees.length - 1];
+    const lastPesee = lotPesees[lotPesees.length - 1];
+    
+    // If current weight >= target, return 0 (target reached!)
+    if (lastPesee.poidsMoyen >= lot.poidsCible) return 0;
+    
     const gmq = calculateGMQ(lot);
-    
+
+    // If no GMQ available, we can't estimate days but we know target not reached
     if (!gmq || gmq <= 0) return null;
-    
+
     const remainingWeight = lot.poidsCible - lastPesee.poidsMoyen;
-    if (remainingWeight <= 0) return 0;
-    
     return Math.ceil(remainingWeight / gmq);
   };
 
   const getLastWeight = (lotId: string): number | null => {
-    const pesees = getPeseesForLot(lotId);
-    if (pesees.length === 0) return null;
-    return pesees[pesees.length - 1].poidsMoyen;
+    const lotPesees = getPeseesForLot(lotId);
+    if (lotPesees.length === 0) return null;
+    return lotPesees[lotPesees.length - 1].poidsMoyen;
   };
 
   const lotsEnCours = lots.filter(l => l.statut === 'en_cours');
@@ -328,8 +476,8 @@ const PostSevrage = () => {
 
   // Calculate average GMQ
   const gmqValues = lotsEnCours.map(l => calculateGMQ(l)).filter((g): g is number => g !== null);
-  const avgGMQ = gmqValues.length > 0 
-    ? Math.round((gmqValues.reduce((a, b) => a + b, 0) / gmqValues.length) * 1000) / 1000 
+  const avgGMQ = gmqValues.length > 0
+    ? Math.round((gmqValues.reduce((a, b) => a + b, 0) / gmqValues.length) * 1000) / 1000
     : null;
 
   return (
@@ -582,10 +730,10 @@ const PostSevrage = () => {
                   />
                 </div>
               </div>
-              
+
               <div className="flex items-center space-x-2 py-2">
-                <Checkbox 
-                  id="createEngraissementLot" 
+                <Checkbox
+                  id="createEngraissementLot"
                   checked={transferFormData.createLot}
                   onCheckedChange={(checked) => setTransferFormData(prev => ({ ...prev, createLot: checked as boolean }))}
                 />
@@ -600,6 +748,78 @@ const PostSevrage = () => {
                 </Button>
                 <Button type="submit" className="flex-1">
                   Valider le transfert
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Mortalite Dialog */}
+        <Dialog open={isMortaliteDialogOpen} onOpenChange={setIsMortaliteDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="font-display text-destructive">
+                Enregistrer une mortalité
+              </DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleMortaliteSubmit} className="space-y-4 mt-4">
+              <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+                Lot: {mortaliteLot?.identification} - Animaux actuels: {mortaliteLot?.nombreActuel}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="mortaliteDate">Date *</Label>
+                  <Input
+                    id="mortaliteDate"
+                    type="date"
+                    value={mortaliteFormData.date}
+                    onChange={(e) => setMortaliteFormData(prev => ({ ...prev, date: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="mortaliteNombre">Nombre décédés *</Label>
+                  <Input
+                    id="mortaliteNombre"
+                    type="number"
+                    min="1"
+                    max={mortaliteLot?.nombreActuel || 1}
+                    value={mortaliteFormData.nombre}
+                    onChange={(e) => setMortaliteFormData(prev => ({ ...prev, nombre: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="mortaliteCause">Cause</Label>
+                <Select
+                  value={mortaliteFormData.cause}
+                  onValueChange={(value) => setMortaliteFormData(prev => ({ ...prev, cause: value as Mortalite['cause'] }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="maladie">Maladie</SelectItem>
+                    <SelectItem value="accident">Accident</SelectItem>
+                    <SelectItem value="faiblesse">Faiblesse</SelectItem>
+                    <SelectItem value="autre">Autre</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="mortaliteNotes">Notes</Label>
+                <Input
+                  id="mortaliteNotes"
+                  placeholder="Notes sur l'incident..."
+                  value={mortaliteFormData.notes}
+                  onChange={(e) => setMortaliteFormData(prev => ({ ...prev, notes: e.target.value }))}
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <Button type="button" variant="outline" onClick={() => setIsMortaliteDialogOpen(false)} className="flex-1">
+                  Annuler
+                </Button>
+                <Button type="submit" variant="destructive" className="flex-1">
+                  Enregistrer
                 </Button>
               </div>
             </form>
@@ -621,8 +841,12 @@ const PostSevrage = () => {
                   {/* Info */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div className="p-3 rounded-xl bg-muted/50 text-center">
-                      <p className="text-2xl font-bold text-foreground">{detailLot.nombreActuel}</p>
-                      <p className="text-xs text-muted-foreground">Animaux</p>
+                      <p className="text-2xl font-bold text-foreground">
+                        {detailLot.nombreActuel > 0 ? detailLot.nombreActuel : detailLot.nombreInitial}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {detailLot.nombreActuel > 0 ? 'Animaux' : `Animaux (initial: ${detailLot.nombreInitial})`}
+                      </p>
                     </div>
                     <div className="p-3 rounded-xl bg-muted/50 text-center">
                       <p className="text-2xl font-bold text-foreground">{getLastWeight(detailLot.id) || detailLot.poidsEntree}</p>
@@ -647,11 +871,11 @@ const PostSevrage = () => {
                         poids: p.poidsMoyen,
                       }))}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis 
-                          dataKey="date" 
+                        <XAxis
+                          dataKey="date"
                           tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
                         />
-                        <YAxis 
+                        <YAxis
                           tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
                           domain={['dataMin - 5', 'dataMax + 10']}
                         />
@@ -663,10 +887,10 @@ const PostSevrage = () => {
                           }}
                           formatter={(value: number) => [`${value} kg`, 'Poids moyen']}
                         />
-                        <Line 
-                          type="monotone" 
-                          dataKey="poids" 
-                          stroke="hsl(var(--primary))" 
+                        <Line
+                          type="monotone"
+                          dataKey="poids"
+                          stroke="hsl(var(--primary))"
                           strokeWidth={3}
                           dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 5 }}
                         />
@@ -737,32 +961,33 @@ const PostSevrage = () => {
                         </p>
                       </div>
                     </div>
-                    <span className={cn(
-                      "px-3 py-1 rounded-full text-xs font-medium border",
-                      statusColors[lot.statut]
-                    )}>
-                      {statusLabels[lot.statut]}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={cn(
+                        "px-3 py-1 rounded-full text-xs font-medium border",
+                        statusColors[lot.statut]
+                      )}>
+                        {statusLabels[lot.statut]}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEdit(lot)}
+                        className="h-8 w-8 text-muted-foreground hover:text-primary"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(lot.id)}
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                  
-                  <div className="flex gap-1 absolute top-6 right-6">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleEdit(lot)}
-                      className="h-8 w-8 text-muted-foreground hover:text-primary bg-card/80 backdrop-blur-sm"
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDelete(lot.id)}
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive bg-card/80 backdrop-blur-sm"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+
+
 
                   {/* Progress bar */}
                   <div className="mb-4">
@@ -771,7 +996,7 @@ const PostSevrage = () => {
                       <span className="font-medium text-foreground">{lastWeight || lot.poidsEntree} / {lot.poidsCible} kg</span>
                     </div>
                     <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      <div 
+                      <div
                         className="h-full rounded-full bg-primary transition-all duration-500"
                         style={{ width: `${progress}%` }}
                       />
@@ -780,8 +1005,12 @@ const PostSevrage = () => {
 
                   <div className="grid grid-cols-2 gap-3 mb-4">
                     <div className="p-3 rounded-xl bg-muted/50 text-center">
-                      <p className="text-lg font-bold text-foreground">{lot.nombreActuel}</p>
-                      <p className="text-xs text-muted-foreground">Animaux</p>
+                      <p className="text-lg font-bold text-foreground">
+                        {lot.nombreActuel > 0 ? lot.nombreActuel : lot.nombreInitial}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {lot.nombreActuel > 0 ? 'Animaux' : 'Animaux (transférés)'}
+                      </p>
                     </div>
                     <div className="p-3 rounded-xl bg-success/10 text-center">
                       <p className="text-lg font-bold text-success">{gmq || '-'}</p>
@@ -798,12 +1027,14 @@ const PostSevrage = () => {
                     </div>
                   )}
 
-                  {daysToTarget === 0 && (
+                  {daysToTarget === 0 && lot.statut === 'en_cours' && (
                     <div className="flex items-center gap-2 text-success mb-4 p-3 rounded-xl bg-success/10">
                       <Target className="h-4 w-4" />
-                      <span className="text-sm font-medium">Objectif atteint !</span>
+                      <span className="text-sm font-medium">Poids cible atteint !</span>
                     </div>
                   )}
+
+
 
                   <div className="flex gap-2">
                     <Button
@@ -815,25 +1046,48 @@ const PostSevrage = () => {
                       <Eye className="h-4 w-4" />
                       Détails
                     </Button>
-                    <Button
-                      size="sm"
-                      className="flex-1 gap-1"
-                      onClick={() => openPeseeDialog(lot.id)}
-                    >
-                      <Scale className="h-4 w-4" />
-                      Pesée
-                    </Button>
+                    {lot.statut === 'en_cours' && (
+                      <Button
+                        size="sm"
+                        className="flex-1 gap-1"
+                        onClick={() => openPeseeDialog(lot.id)}
+                      >
+                        <Scale className="h-4 w-4" />
+                        Pesée
+                      </Button>
+                    )}
                   </div>
-
                   {lot.statut === 'en_cours' && (
-                    <div className="mt-3 pt-3 border-t border-border">
-                      <Button 
-                        className="w-full gap-2" 
-                        variant="secondary"
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="w-full mt-2 gap-1"
+                      onClick={() => openMortaliteDialog(lot)}
+                    >
+                      <Skull className="h-4 w-4" />
+                      Mortalité
+                    </Button>
+                  )}
+                  
+                  {lot.statut === 'en_cours' && daysToTarget !== null && daysToTarget <= 0 && (
+                    <div className="flex gap-2 mt-2">
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="flex-1 gap-1"
                         onClick={() => openTransferDialog(lot)}
                       >
                         <ArrowRight className="h-4 w-4" />
-                        Transférer en Engraissement
+                        Transférer
+                      </Button>
+                      <Button
+                        variant="success"
+                        size="sm"
+                        className="flex-1 gap-1"
+                        onClick={() => handleMarkTermine(lot)}
+                      >
+                        <CheckCircle className="h-4 w-4" />
+                        Terminer
                       </Button>
                     </div>
                   )}

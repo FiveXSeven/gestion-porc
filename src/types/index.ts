@@ -14,24 +14,16 @@ export interface Truie {
   notes: string;
 }
 
-export interface Verrat {
-  id: string;
-  identification: string;
-  dateEntree: string;
-  dateNaissance: string;
-  poids: number;
-  statut: 'actif' | 'reforme';
-}
+
 
 export interface Saillie {
   id: string;
   truieId: string;
-  verratId: string;
   date: string;
   methode: 'naturelle' | 'insemination';
   employe: string;
   datePrevueMiseBas: string;
-  statut: 'en_attente' | 'confirmee' | 'echouee';
+  statut: 'en_cours' | 'confirmee' | 'echouee';
 }
 
 export interface MiseBas {
@@ -58,7 +50,7 @@ export interface Portee {
 export interface Vente {
   id: string;
   date: string;
-  typeAnimal: 'porcelet' | 'porc_engraissement' | 'truie_reforme' | 'verrat_reforme';
+  typeAnimal: 'porcelet' | 'porc_engraissement' | 'truie_reforme';
   quantite: number;
   poidsTotal: number;
   prixUnitaire: number;
@@ -78,7 +70,7 @@ export interface Depense {
 
 export interface Alert {
   id: string;
-  type: 'mise_bas' | 'sevrage' | 'vente' | 'sante';
+  type: 'mise_bas' | 'sevrage' | 'vente' | 'sante' | 'post_sevrage_pret' | 'engraissement_pret';
   message: string;
   date: string;
   read: boolean;
@@ -96,7 +88,7 @@ export interface LotEngraissement {
   poidsEntree: number;
   dateEntree: string;
   poidsCible: number;
-  statut: 'en_cours' | 'vendu' | 'partiel';
+  statut: 'en_cours' | 'vendu' | 'partiel' | 'pret' | 'termine';
   notes: string;
 }
 
@@ -112,7 +104,7 @@ export interface LotPostSevrage {
   poidsEntree: number;
   dateEntree: string;
   poidsCible: number;
-  statut: 'en_cours' | 'transfere' | 'vendu' | 'partiel';
+  statut: 'en_cours' | 'transfere' | 'vendu' | 'partiel' | 'pret' | 'termine';
   notes: string;
 }
 
@@ -133,3 +125,48 @@ export interface StockAliment {
   poidsSac: 25 | 40 | number; // 25kg ou 40kg, allow number for flexibility but UI will enforce
   dateMiseAJour: string;
 }
+
+export interface Mortalite {
+  id: string;
+  date: string;
+  nombre: number;
+  cause: 'maladie' | 'accident' | 'faiblesse' | 'autre';
+  notes: string;
+  lotEngraissementId?: string;
+  lotPostSevrageId?: string;
+}
+
+export interface ConsommationAliment {
+  id: string;
+  date: string;
+  quantiteSacs: number;
+  stockAlimentId: string;
+  lotEngraissementId?: string;
+  lotPostSevrageId?: string;
+  notes: string;
+}
+
+export interface Vaccination {
+  id: string;
+  date: string;
+  nom: string;
+  type: 'obligatoire' | 'preventif' | 'curatif';
+  lotType: 'post-sevrage' | 'engraissement' | 'truie';
+  lotId?: string;
+  truieId?: string;
+  dateRappel?: string;
+  notes: string;
+}
+
+export interface Traitement {
+  id: string;
+  date: string;
+  nom: string;
+  medicament: string;
+  dureeJours: number;
+  lotType: 'post-sevrage' | 'engraissement' | 'truie';
+  lotId?: string;
+  truieId?: string;
+  notes: string;
+}
+
