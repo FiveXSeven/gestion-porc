@@ -28,6 +28,11 @@ export const create = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Impossible de créer une saillie pour une truie réformée ou vendue' });
         }
 
+        // Calculer la date de contrôle retour en chaleur (J+21)
+        const saillieDate = new Date(data.date);
+        const dateRetourChaleur = new Date(saillieDate);
+        dateRetourChaleur.setDate(dateRetourChaleur.getDate() + 21);
+
         const newSaillie = await prisma.saillie.create({
             data: {
                 truieId: data.truieId,
@@ -35,6 +40,7 @@ export const create = async (req: Request, res: Response) => {
                 methode: data.methode,
                 employe: data.employe,
                 datePrevueMiseBas: new Date(data.datePrevueMiseBas),
+                dateRetourChaleur: dateRetourChaleur,
                 statut: data.statut,
             },
         });

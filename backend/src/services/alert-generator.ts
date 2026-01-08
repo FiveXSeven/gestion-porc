@@ -142,14 +142,63 @@ export async function checkPoidsCibleEngraissement(): Promise<number> {
 }
 
 // Run all alert checks
-export async function runAllAlertChecks(): Promise<{ miseBasAlerts: number; postSevrageAlerts: number; engraissementAlerts: number }> {
+export async function runAllAlertChecks(): Promise<{ miseBasAlerts: number; postSevrageAlerts: number; engraissementAlerts: number; retourChaleurAlerts: number }> {
     const miseBasAlerts = await generateMiseBasAlerts();
     const postSevrageAlerts = await checkPoidsCiblePostSevrage();
     const engraissementAlerts = await checkPoidsCibleEngraissement();
+    const retourChaleurAlerts = await checkRetourChaleur();
     
     return {
         miseBasAlerts,
         postSevrageAlerts,
         engraissementAlerts,
+        retourChaleurAlerts,
     };
+}
+
+// Check for upcoming return-to-heat control dates (3 days before)
+export async function checkRetourChaleur(): Promise<number> {
+    const today = new Date();
+    const threeDaysFromNow = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000);
+    
+    // Find saillies with return-to-heat check in the next 3 days that are still 'en_cours'
+    const upcomingSaillies = await prisma.saillie.findMany({
+        where: {
+            statut: 'en_cours',
+            dateRetourChaleur: {
+                gte: today,
+                lte: threeDaysFromNow,
+            },
+        },
+        include: {
+            truie: true,
+        },
+    });
+
+    let createdCount = 0;
+    for (const saillie of upcomingSaillies) {
+        // Check if alert already exists for this saillie's return-to-heat check
+        const existingAlert = await prisma.alert.findFirst({
+            where: {
+                type: 'retour_chaleur',
+                relatedId: saillie.id,
+                read: false,
+            },
+        });
+
+        if (!existingAlert) {
+            const daysUntil = Math.ceil((new Date(saillie.dateRetourChaleur).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+            await prisma.alert.create({
+                data: {
+                    type: 'retour_chaleur',
+                    message: `Contrôle retour en chaleur pour ${saillie.truie.identification} dans ${daysUntil} jour(s) - Vérifier si gestation confirmée`,
+                    date: new Date(),
+                    read: false,
+                    relatedId: saillie.id,
+                },
+            });
+            createdCount++;
+        }
+    }
+    return createdCount;
 }

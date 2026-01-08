@@ -630,7 +630,27 @@ const Portees = () => {
                   )}
 
                   {!portee.dateSevrage && (
-                    <div className="mt-4 pt-4 border-t border-border">
+                    <div className="mt-4 pt-4 border-t border-border space-y-3">
+                      {/* Estimation de sevrage */}
+                      {(() => {
+                        const estimation = getSevrageEstimation(portee);
+                        if (estimation) {
+                          return (
+                            <div className="bg-info/10 rounded-lg p-3">
+                              <div className="flex items-center gap-2 text-info mb-1">
+                                <span className="text-sm font-medium">📅 Estimation de sevrage</span>
+                              </div>
+                              <p className="text-sm text-foreground font-medium">
+                                Entre le {format(estimation.sevrageMin, "d MMM", { locale: fr })} et le {format(estimation.sevrageMax, "d MMM yyyy", { locale: fr })}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                (21 à 28 jours après la naissance)
+                              </p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                       <Button
                         className="w-full gap-2"
                         variant="secondary"
