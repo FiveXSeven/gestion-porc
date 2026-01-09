@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import * as api from '@/lib/api';
 import { Saillie, Truie } from '@/types';
-import { Plus, Heart, Calendar, Search, Edit2, Trash2, Check, X } from 'lucide-react';
+import { Plus, Heart, Calendar, Search, Edit2, Trash2, Check, X, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, addDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -352,6 +352,22 @@ const Saillies = () => {
                       <span className="font-medium text-foreground">{saillie.employe || '-'}</span>
                     </div>
                   </div>
+
+                  {/* Date de contrôle retour en chaleur */}
+                  {saillie.statut === 'en_cours' && saillie.dateRetourChaleur && (
+                    <div className="mt-4 pt-4 border-t border-border">
+                      <div className="flex items-center gap-2 text-warning mb-1">
+                        <AlertTriangle className="h-4 w-4" />
+                        <span className="text-sm font-medium">Contrôle retour en chaleur</span>
+                      </div>
+                      <p className="font-semibold text-foreground">
+                        {format(new Date(saillie.dateRetourChaleur), "d MMMM yyyy", { locale: fr })}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Si pas de retour → Confirmer gestation
+                      </p>
+                    </div>
+                  )}
 
                   <div className="mt-4 pt-4 border-t border-border">
                     <div className="flex items-center gap-2 text-accent mb-1">

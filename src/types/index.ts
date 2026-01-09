@@ -23,6 +23,7 @@ export interface Saillie {
   methode: 'naturelle' | 'insemination';
   employe: string;
   datePrevueMiseBas: string;
+  dateRetourChaleur: string; // Date prévue pour contrôle retour en chaleur (J+21)
   statut: 'en_cours' | 'confirmee' | 'echouee';
 }
 
@@ -70,7 +71,7 @@ export interface Depense {
 
 export interface Alert {
   id: string;
-  type: 'mise_bas' | 'sevrage' | 'vente' | 'sante' | 'post_sevrage_pret' | 'engraissement_pret';
+  type: 'mise_bas' | 'sevrage' | 'vente' | 'sante' | 'post_sevrage_pret' | 'engraissement_pret' | 'retour_chaleur';
   message: string;
   date: string;
   read: boolean;

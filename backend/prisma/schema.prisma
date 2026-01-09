@@ -35,6 +35,7 @@ model Saillie {
   methode            String   // 'naturelle' | 'insemination'
   employe            String
   datePrevueMiseBas  DateTime
+  dateRetourChaleur  DateTime // Date prévue pour contrôle retour en chaleur (J+21)
   statut             String   // 'en_cours' | 'confirmee' | 'echouee'
   
   miseBas            MiseBas?
@@ -101,7 +102,7 @@ model Depense {
 
 model Alert {
   id        String   @id @default(cuid())
-  type      String   // 'mise_bas' | 'sevrage' | 'vente' | 'sante' | 'post_sevrage_pret' | 'engraissement_pret'
+  type      String   // 'mise_bas' | 'sevrage' | 'vente' | 'sante' | 'post_sevrage_pret' | 'engraissement_pret' | 'retour_chaleur'
   message   String
   date      DateTime
   read      Boolean  @default(false)
