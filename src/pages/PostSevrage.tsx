@@ -98,7 +98,7 @@ const PostSevrage = () => {
         api.getLotsPostSevrage(),
         api.getPesees()
       ]);
-      setLots(lotsData);
+      setLots(lotsData.sort((a, b) => new Date(b.dateCreation).getTime() - new Date(a.dateCreation).getTime()));
       setPesees(peseesData);
     } catch (error) {
       console.error(error);
@@ -250,7 +250,7 @@ const PostSevrage = () => {
 
   const filteredLots = lots.filter(lot =>
     lot.identification.toLowerCase().includes(search.toLowerCase())
-  );
+  ).sort((a, b) => new Date(b.dateCreation).getTime() - new Date(a.dateCreation).getTime());
 
   const handlePeseeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

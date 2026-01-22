@@ -55,7 +55,7 @@ const Verrats = () => {
   const loadData = async () => {
     try {
       const verratsData = await api.getVerrats();
-      setVerrats(verratsData);
+      setVerrats(verratsData.sort((a, b) => new Date(b.dateEntree).getTime() - new Date(a.dateEntree).getTime()));
       
       // Charger les stats pour chaque verrat
       const statsMap: Record<string, { totalSaillies: number; tauxReussite: number }> = {};
@@ -164,7 +164,7 @@ const Verrats = () => {
   const filteredVerrats = verrats.filter(verrat => 
     verrat.identification.toLowerCase().includes(search.toLowerCase()) ||
     raceLabels[verrat.race]?.toLowerCase().includes(search.toLowerCase())
-  );
+  ).sort((a, b) => new Date(b.dateEntree).getTime() - new Date(a.dateEntree).getTime());
 
   const getAge = (dateNaissance: string) => {
     return differenceInYears(new Date(), new Date(dateNaissance));

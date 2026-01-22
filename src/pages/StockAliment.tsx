@@ -43,7 +43,7 @@ const StockAlimentPage = () => {
   const loadStocks = async () => {
     try {
       const data = await api.getStockAliments();
-      setStocks(data);
+      setStocks(data.sort((a, b) => new Date(b.dateMiseAJour).getTime() - new Date(a.dateMiseAJour).getTime()));
     } catch (error) {
       console.error(error);
       toast.error('Erreur lors du chargement des stocks');
@@ -173,7 +173,7 @@ const StockAlimentPage = () => {
   const filteredStocks = stocks.filter(stock =>
     stock.nom.toLowerCase().includes(search.toLowerCase()) ||
     stock.type.toLowerCase().includes(search.toLowerCase())
-  );
+  ).sort((a, b) => new Date(b.dateMiseAJour).getTime() - new Date(a.dateMiseAJour).getTime());
 
   const lowStockItems = stocks.filter(s => s.quantite < 5);
 

@@ -75,7 +75,15 @@ const Portees = () => {
         api.getSaillies(),
         api.getVerrats()
       ]);
-      setPortees(porteesData);
+      // Sort portees based on miseBas date (descending)
+      const sortedPortees = porteesData.sort((a, b) => {
+        const mbA = misesBasData.find(m => m.id === a.miseBasId);
+        const mbB = misesBasData.find(m => m.id === b.miseBasId);
+        const dateA = mbA ? new Date(mbA.date).getTime() : 0;
+        const dateB = mbB ? new Date(mbB.date).getTime() : 0;
+        return dateB - dateA;
+      });
+      setPortees(sortedPortees);
       setMisesBas(misesBasData);
       setTruies(truiesData);
       setSaillies(sailliesData);
@@ -352,6 +360,11 @@ const Portees = () => {
   const filteredPortees = portees.filter(portee => {
     const truie = truies.find(t => t.id === portee.truieId);
     return (truie?.identification || '').toLowerCase().includes(search.toLowerCase());
+  }).sort((a, b) => {
+    const mbA = misesBas.find(m => m.id === a.miseBasId);
+    const mbB = misesBas.find(m => m.id === b.miseBasId);
+    if (!mbA || !mbB) return 0;
+    return new Date(mbB.date).getTime() - new Date(mbA.date).getTime();
   });
 
   return (

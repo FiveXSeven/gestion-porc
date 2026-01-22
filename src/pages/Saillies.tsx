@@ -59,7 +59,7 @@ const Saillies = () => {
         api.getTruies(),
         api.getVerrats()
       ]);
-      setSaillies(sailliesData);
+      setSaillies(sailliesData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
       setTruies(truiesData);
       setVerrats(verratsData);
     } catch (error) {
@@ -183,7 +183,7 @@ const Saillies = () => {
       (verrat?.identification || '').toLowerCase().includes(search.toLowerCase()) ||
       saillie.employe?.toLowerCase().includes(search.toLowerCase());
     return textMatch;
-  });
+  }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const availableTruies = truies.filter(t => t.statut === 'active');
   const availableVerrats = verrats.filter(v => v.statut === 'actif');

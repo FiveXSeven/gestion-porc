@@ -67,7 +67,7 @@ const Truies = () => {
   const loadTruies = async () => {
     try {
       const data = await api.getTruies();
-      setTruies(data);
+      setTruies(data.sort((a, b) => new Date(b.dateEntree).getTime() - new Date(a.dateEntree).getTime()));
     } catch (error) {
       toast.error('Erreur lors du chargement des truies');
       console.error(error);
@@ -195,7 +195,7 @@ const Truies = () => {
     const matchSearch = truie.identification.toLowerCase().includes(search.toLowerCase());
     const matchStatut = filterStatut === 'all' || truie.statut === filterStatut;
     return matchSearch && matchStatut;
-  });
+  }).sort((a, b) => new Date(b.dateEntree).getTime() - new Date(a.dateEntree).getTime());
 
   return (
     <MainLayout>
