@@ -383,30 +383,37 @@ const Verrats = () => {
                   </div>
                 </div>
 
-                {verrat.statut === 'actif' && (
+                {(verrat.statut === 'actif' || verrat.statut === 'reforme') && (
                   <div className="mt-4 pt-4 border-t border-border flex gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="flex-1 gap-1"
-                      onClick={() => handleEdit(verrat)}
-                    >
-                      <Edit2 className="h-4 w-4" />
-                      Modifier
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="flex-1 gap-1 text-warning hover:text-warning"
-                      onClick={() => handleReforme(verrat.id)}
-                    >
-                      <AlertTriangle className="h-4 w-4" />
-                      Réformer
-                    </Button>
+                    {verrat.statut === 'actif' && (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="flex-1 gap-1"
+                          onClick={() => handleEdit(verrat)}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                          Modifier
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="flex-1 gap-1 text-warning hover:text-warning"
+                          onClick={() => handleReforme(verrat.id)}
+                        >
+                          <AlertTriangle className="h-4 w-4" />
+                          Réformer
+                        </Button>
+                      </>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="text-destructive hover:text-destructive"
+                      className={cn(
+                        "text-destructive hover:text-destructive",
+                        verrat.statut === 'reforme' && "ml-auto"
+                      )}
                       onClick={() => handleDelete(verrat.id)}
                     >
                       <Trash2 className="h-4 w-4" />
