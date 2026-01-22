@@ -24,6 +24,16 @@ async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T>
     return response.json();
 }
 
+// Auth
+export const login = (email: string, pin: string) => 
+    fetchJson<User>('/auth/login', { method: 'POST', body: JSON.stringify({ email, pin }) });
+
+export const register = (email: string, pin: string, name: string) => 
+    fetchJson<User>('/auth/register', { method: 'POST', body: JSON.stringify({ email, pin, name }) });
+
+export const getMe = (email: string) => 
+    fetchJson<User>(`/auth/me?email=${encodeURIComponent(email)}`);
+
 // Truies
 export const getTruies = () => fetchJson<Truie[]>('/truies');
 export const addTruie = (item: Truie) => fetchJson<Truie>('/truies', { method: 'POST', body: JSON.stringify(item) });

@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from '@/types';
-import { getUser, saveUser, isAuthenticated as checkAuth, setAuthenticated, logout as doLogout } from '@/lib/storage';
+import * as api from '@/lib/api';
+import { toast } from 'sonner';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (email: string, pin: string) => boolean;
-  register: (email: string, pin: string, name: string) => boolean;
+  login: (email: string, pin: string) => Promise<boolean>;
+  register: (email: string, pin: string, name: string) => Promise<boolean>;
   logout: () => void;
 }
 
@@ -15,44 +16,68 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [authenticated, setAuthenticatedState] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const storedUser = getUser();
-    const authStatus = checkAuth();
-    if (storedUser && authStatus) {
-      setUser(storedUser);
-      setAuthenticatedState(true);
-      setAuthenticatedState(true);
-    }
+    const initAuth = async () => {
+      const storedEmail = localStorage.getItem('userEmail');
+      const isAuth = localStorage.getItem('isAuthenticated') === 'true';
+      
+      if (storedEmail && isAuth) {
+        try {
+          const userData = await api.getMe(storedEmail);
+          setUser(userData);
+          setAuthenticatedState(true);
+        } catch (error) {
+          console.error('Session restore failed:', error);
+          localStorage.removeItem('isAuthenticated');
+          localStorage.removeItem('userEmail');
+        }
+      }
+      setLoading(false);
+    };
+    
+    initAuth();
   }, []);
 
-  const login = (email: string, pin: string): boolean => {
-    const storedUser = getUser();
-    if (storedUser && storedUser.email === email && storedUser.pin === pin) {
-      setUser(storedUser);
+  const login = async (email: string, pin: string): Promise<boolean> => {
+    try {
+      const userData = await api.login(email, pin);
+      setUser(userData);
       setAuthenticatedState(true);
-      setAuthenticated(true);
-      setAuthenticated(true);
+      localStorage.setItem('isAuthenticated', 'true');
+      localStorage.setItem('userEmail', email);
       return true;
+    } catch (error) {
+      toast.error('Email ou code PIN incorrect');
+      return false;
     }
-    return false;
   };
 
-  const register = (email: string, pin: string, name: string): boolean => {
-    const newUser: User = { email, pin, name };
-    saveUser(newUser);
-    setUser(newUser);
-    setAuthenticatedState(true);
-    setAuthenticated(true);
-    setAuthenticated(true);
-    return true;
+  const register = async (email: string, pin: string, name: string): Promise<boolean> => {
+    try {
+      const userData = await api.register(email, pin, name);
+      setUser(userData);
+      setAuthenticatedState(true);
+      localStorage.setItem('isAuthenticated', 'true');
+      localStorage.setItem('userEmail', email);
+      return true;
+    } catch (error) {
+      toast.error('Erreur lors de l\'inscription');
+      return false;
+    }
   };
 
   const logout = () => {
     setUser(null);
     setAuthenticatedState(false);
-    doLogout();
+    localStorage.removeItem('isAuthenticated');
+    localStorage.removeItem('userEmail');
   };
+
+  if (loading) {
+    return null; // Ou un spinner
+  }
 
   return (
     <AuthContext.Provider value={{ user, isAuthenticated: authenticated, login, register, logout }}>

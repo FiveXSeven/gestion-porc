@@ -17,6 +17,7 @@ import consommationsRoutes from './routes/consommations';
 import santeRoutes from './routes/sante';
 import verratsRoutes from './routes/verrats';
 import mouvementsRoutes from './routes/mouvements';
+import authRoutes from './routes/auth';
 
 dotenv.config();
 
@@ -27,6 +28,7 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/truies', truiesRoutes);
 app.use('/api/saillies', sailliesRoutes);
 app.use('/api/mises-bas', misesBasRoutes);

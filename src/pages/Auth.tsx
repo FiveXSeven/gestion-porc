@@ -96,7 +96,7 @@ const Auth = () => {
           </div>
 
           <p className="text-center text-sm text-muted-foreground mt-6">
-            Données stockées localement sur votre appareil
+            Gérez votre élevage en toute sécurité
           </p>
         </div>
       </div>

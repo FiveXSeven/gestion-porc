@@ -265,3 +265,13 @@ model Mouvement {
   notes           String   @default("")
   createdAt       DateTime @default(now())
 }
+
+// Utilisateurs
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  pin       String   // Code PIN pour la connexion
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
