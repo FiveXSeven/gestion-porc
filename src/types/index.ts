@@ -197,4 +197,5 @@ export interface Mouvement {
   destination?: string;
   poids?: number;
   notes: string;
+  createdAt?: string;
 }

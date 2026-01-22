@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
 import { Vente } from '@/types';
 import { Plus, ShoppingCart, TrendingUp, Search, Edit2, Trash2 } from 'lucide-react';
@@ -16,9 +17,11 @@ const typeLabels: Record<Vente['typeAnimal'], string> = {
   porcelet: 'Porcelet',
   porc_engraissement: 'Porc d\'engraissement',
   truie_reforme: 'Truie réformée',
+  verrat_reforme: 'Verrat réformé',
 };
 
 const Ventes = () => {
+  const { refreshAlerts } = useAlertNotifications();
   const [ventes, setVentes] = useState<Vente[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -98,10 +101,40 @@ const Ventes = () => {
         };
 
         await api.addVente(newVente);
+
+        // Automate traceability movement
+        try {
+          await api.addMouvement({
+            id: '',
+            date: formData.date,
+            typeMouvement: 'sortie',
+            typeAnimal: (formData.typeAnimal === 'truie_reforme' ? 'truie' : 
+                         formData.typeAnimal === 'verrat_reforme' ? 'verrat' : 
+                         formData.typeAnimal) as any,
+            motif: 'vente',
+            quantite,
+            poids: parseFloat(formData.poidsTotal) || 0,
+            destination: formData.acheteur,
+            notes: `Vente automatique: ${formData.notes}`,
+          });
+        } catch (traceError) {
+          console.error('Erreur lors de l\'automatisation de la traçabilité:', traceError);
+          // Don't block the sale even if traceability fails
+        }
+
+        await api.addAlert({
+          id: '',
+          date: new Date().toISOString(),
+          message: `Nouvelle vente: ${quantite} ${typeLabels[formData.typeAnimal]}${quantite > 1 ? 's' : ''} vendu(s) à ${formData.acheteur || 'un client'} pour ${ (quantite * prixUnitaire).toLocaleString()} FCFA.`,
+          type: 'vente',
+          read: false
+        });
+
         toast.success('Vente enregistrée avec succès');
       }
 
       loadVentes();
+      refreshAlerts();
       setIsDialogOpen(false);
       resetForm();
     } catch (error) {

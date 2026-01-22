@@ -5,13 +5,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
 import { Mouvement } from '@/types';
-import { Plus, FileText, ArrowUpCircle, ArrowDownCircle, Filter } from 'lucide-react';
+import { Plus, FileText, ArrowUpCircle, ArrowDownCircle, Filter, Search, Info, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { Truie, Verrat, Saillie, Portee, MiseBas, Vente, LotPostSevrage, LotEngraissement } from '@/types';
 
 const typeAnimalLabels: Record<string, string> = {
   truie: 'Truie',
@@ -29,7 +31,16 @@ const motifLabels: Record<string, string> = {
   transfert: 'Transfert',
 };
 
+const raceLabels: Record<string, string> = {
+  large_white: 'Large White',
+  landrace: 'Landrace',
+  pietrain: 'Piétrain',
+  duroc: 'Duroc',
+  autre: 'Autre',
+};
+
 const Tracabilite = () => {
+  const { refreshAlerts } = useAlertNotifications();
   const [mouvements, setMouvements] = useState<Mouvement[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -48,11 +59,24 @@ const Tracabilite = () => {
     typeAnimal: '',
     typeMouvement: '',
   });
+  const [search, setSearch] = useState('');
   const [stats, setStats] = useState<{
     totalEntrees: number;
     totalSorties: number;
     solde: number;
   } | null>(null);
+
+  // States for detailed view
+  const [truies, setTruies] = useState<Truie[]>([]);
+  const [verrats, setVerrats] = useState<Verrat[]>([]);
+  const [saillies, setSaillies] = useState<Saillie[]>([]);
+  const [portees, setPortees] = useState<Portee[]>([]);
+  const [misesBas, setMisesBas] = useState<MiseBas[]>([]);
+  const [ventes, setVentes] = useState<Vente[]>([]);
+  const [lotsPS, setLotsPS] = useState<LotPostSevrage[]>([]);
+  const [lotsENG, setLotsENG] = useState<LotEngraissement[]>([]);
+  const [selectedMouvement, setSelectedMouvement] = useState<Mouvement | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -60,12 +84,39 @@ const Tracabilite = () => {
 
   const loadData = async () => {
     try {
-      const [mouvementsData, statsData] = await Promise.all([
+      const [
+        mouvementsData, 
+        statsData, 
+        truiesData, 
+        verratsData, 
+        sailliesData,
+        porteesData, 
+        misesBasData, 
+        ventesData,
+        lotsPSData,
+        lotsENGData
+      ] = await Promise.all([
         api.getMouvements(),
         api.getMouvementsStats(),
+        api.getTruies(),
+        api.getVerrats(),
+        api.getSaillies(),
+        api.getPortees(),
+        api.getMisesBas(),
+        api.getVentes(),
+        api.getLotsPostSevrage(),
+        api.getLotsEngraissement(),
       ]);
       setMouvements(mouvementsData);
       setStats(statsData);
+      setTruies(truiesData);
+      setVerrats(verratsData);
+      setSaillies(sailliesData);
+      setPortees(porteesData);
+      setMisesBas(misesBasData);
+      setVentes(ventesData);
+      setLotsPS(lotsPSData);
+      setLotsENG(lotsENGData);
     } catch (error) {
       console.error(error);
       toast.error('Erreur lors du chargement des données');
@@ -110,8 +161,17 @@ const Tracabilite = () => {
         notes: formData.notes,
       };
       await api.addMouvement(newMouvement);
+      await api.addAlert({
+        id: '',
+        date: new Date().toISOString(),
+        message: `${formData.typeMouvement === 'entree' ? 'Entrée' : 'Sortie'} enregistrée: ${formData.quantite} ${typeAnimalLabels[formData.typeAnimal]} (${motifLabels[formData.motif]}).`,
+        type: formData.typeMouvement === 'entree' ? 'mise_bas' : 'vente', // Use appropriate type
+        read: false
+      });
+
       toast.success('Mouvement enregistré avec succès');
       loadData();
+      refreshAlerts();
       setIsDialogOpen(false);
       resetForm();
     } catch (error) {
@@ -136,7 +196,30 @@ const Tracabilite = () => {
   const filteredMouvements = mouvements.filter(m => {
     if (filter.typeAnimal && m.typeAnimal !== filter.typeAnimal) return false;
     if (filter.typeMouvement && m.typeMouvement !== filter.typeMouvement) return false;
+    
+    if (search) {
+      const searchLower = search.toLowerCase();
+      const identification = m.identification?.toLowerCase() || '';
+      const notes = m.notes?.toLowerCase() || '';
+      const origine = m.origine?.toLowerCase() || '';
+      const destination = m.destination?.toLowerCase() || '';
+      const typeAnimal = typeAnimalLabels[m.typeAnimal].toLowerCase();
+      const motif = motifLabels[m.motif].toLowerCase();
+      
+      return identification.includes(searchLower) || 
+             notes.includes(searchLower) || 
+             origine.includes(searchLower) || 
+             destination.includes(searchLower) ||
+             typeAnimal.includes(searchLower) ||
+             motif.includes(searchLower);
+    }
+    
     return true;
+  }).sort((a, b) => {
+    if (a.createdAt && b.createdAt) {
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    }
+    return new Date(b.date).getTime() - new Date(a.date).getTime();
   });
 
   // Motifs disponibles selon le type de mouvement
@@ -161,7 +244,7 @@ const Tracabilite = () => {
             if (!open) resetForm();
           }}>
             <DialogTrigger asChild>
-              <Button className="gap-2" variant="primary">
+              <Button className="gap-2" variant="default">
                 <Plus className="h-5 w-5" />
                 Nouveau mouvement
               </Button>
@@ -301,7 +384,7 @@ const Tracabilite = () => {
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} className="flex-1">
                     Annuler
                   </Button>
-                  <Button type="submit" variant="primary" className="flex-1">
+                  <Button type="submit" variant="default" className="flex-1">
                     Enregistrer
                   </Button>
                 </div>
@@ -342,40 +425,47 @@ const Tracabilite = () => {
           </div>
         )}
 
-        {/* Filters */}
-        <div className="flex gap-3 animate-slide-up">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Filtrer:</span>
+        {/* Filters and Search */}
+        <div className="flex flex-col md:flex-row gap-4 animate-slide-up">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+            <Input
+              placeholder="Rechercher par ID, origine, destination, notes..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-11"
+            />
           </div>
-          <Select
-            value={filter.typeAnimal}
-            onValueChange={(value) => setFilter(prev => ({ ...prev, typeAnimal: value === 'all' ? '' : value }))}
-          >
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="Type animal" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Tous</SelectItem>
-              <SelectItem value="truie">Truie</SelectItem>
-              <SelectItem value="verrat">Verrat</SelectItem>
-              <SelectItem value="porcelet">Porcelet</SelectItem>
-              <SelectItem value="porc_engraissement">Porc (eng.)</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select
-            value={filter.typeMouvement}
-            onValueChange={(value) => setFilter(prev => ({ ...prev, typeMouvement: value === 'all' ? '' : value }))}
-          >
-            <SelectTrigger className="w-32">
-              <SelectValue placeholder="Mouvement" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Tous</SelectItem>
-              <SelectItem value="entree">Entrées</SelectItem>
-              <SelectItem value="sortie">Sorties</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex gap-2">
+            <Select
+              value={filter.typeAnimal}
+              onValueChange={(value) => setFilter(prev => ({ ...prev, typeAnimal: value === 'all' ? '' : value }))}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Type animal" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les animaux</SelectItem>
+                <SelectItem value="truie">Truie</SelectItem>
+                <SelectItem value="verrat">Verrat</SelectItem>
+                <SelectItem value="porcelet">Porcelet</SelectItem>
+                <SelectItem value="porc_engraissement">Porc (eng.)</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={filter.typeMouvement}
+              onValueChange={(value) => setFilter(prev => ({ ...prev, typeMouvement: value === 'all' ? '' : value }))}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Mouvement" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les mouvements</SelectItem>
+                <SelectItem value="entree">Entrées</SelectItem>
+                <SelectItem value="sortie">Sorties</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* Table */}
@@ -430,14 +520,28 @@ const Tracabilite = () => {
                         {mouvement.origine || mouvement.destination || '-'}
                       </td>
                       <td className="p-4 text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => handleDelete(mouvement.id)}
-                        >
-                          Supprimer
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-primary hover:text-primary hover:bg-primary/10"
+                            onClick={() => {
+                              setSelectedMouvement(mouvement);
+                              setIsDetailOpen(true);
+                            }}
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
+                            Détails
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => handleDelete(mouvement.id)}
+                          >
+                            Supprimer
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -447,6 +551,195 @@ const Tracabilite = () => {
           </div>
         </div>
       </div>
+
+      {/* Detail Dialog */}
+      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Détails du mouvement</DialogTitle>
+          </DialogHeader>
+          {selectedMouvement && (() => {
+            const mvmt = selectedMouvement;
+            let details = null;
+
+            if (mvmt.typeAnimal === 'truie' || mvmt.typeAnimal === 'verrat') {
+              const animal = mvmt.typeAnimal === 'truie' 
+                ? truies.find(t => t.identification === mvmt.identification)
+                : verrats.find(v => v.identification === mvmt.identification);
+              
+              if (animal) {
+                details = (
+                  <div className="space-y-4">
+                    <div className="bg-muted/30 p-4 rounded-xl space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Identification</span>
+                        <span className="font-bold">{animal.identification}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Race</span>
+                        <span className="font-medium">{raceLabels[animal.race] || animal.race}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Statut</span>
+                        <span className="font-medium underline decoration-primary/30 uppercase text-[10px] tracking-wider">{animal.statut}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Date de naissance</span>
+                        <span className="font-medium">{format(new Date(animal.dateNaissance), "dd/MM/yyyy", { locale: fr })}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Poids initial</span>
+                        <span className="font-medium">{animal.poids} kg</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+            } else if (mvmt.typeAnimal === 'porcelet' || mvmt.typeAnimal === 'porc_engraissement') {
+              // Try to find lot or portee
+              const lotPS = lotsPS.find(l => l.identification === mvmt.identification);
+              const lotENG = lotsENG.find(l => l.identification === mvmt.identification);
+              const porteeId = lotPS?.porteeId || lotENG?.porteeId;
+              
+              // If it's a sevrage/naissance and we have identification like SEVRAGE-truieID
+              // we can try to find the portee from the identification string
+              let matchedPortee = portees.find(p => p.id === porteeId);
+              
+              if (!matchedPortee && mvmt.identification?.startsWith('SEVRAGE-')) {
+                const truieIdent = mvmt.identification.replace('SEVRAGE-', '');
+                const truie = truies.find(t => t.identification === truieIdent);
+                if (truie) {
+                  // Find most recent portee for this truie close to mvmt date
+                  const mvmtDate = new Date(mvmt.date).getTime();
+                  matchedPortee = portees
+                    .filter(p => p.truieId === truie.id)
+                    .sort((a, b) => {
+                      const mbA = misesBas.find(m => m.id === a.miseBasId);
+                      const mbB = misesBas.find(m => m.id === b.miseBasId);
+                      const dateA = mbA ? new Date(mbA.date).getTime() : 0;
+                      const dateB = mbB ? new Date(mbB.date).getTime() : 0;
+                      return Math.abs(dateA - mvmtDate) - Math.abs(dateB - mvmtDate);
+                    })[0];
+                }
+              }
+
+              if (matchedPortee) {
+                const mb = misesBas.find(m => m.id === matchedPortee.miseBasId);
+                const truie = truies.find(t => t.id === matchedPortee.truieId);
+                const saillie = mb ? saillies.find(s => s.id === mb.saillieId) : null;
+                const verrat = saillie?.verratId ? verrats.find(v => v.id === saillie.verratId) : null;
+
+                const geneticText = (!truie || !verrat || truie.race === verrat.race) 
+                  ? `Race Pure: ${verrat ? (raceLabels[verrat.race] || verrat.race) : (truie ? (raceLabels[truie.race] || truie.race) : 'Inconnue')}`
+                  : `Croisement: ${raceLabels[truie.race]?.split(' ')[0]} x ${raceLabels[verrat.race]?.split(' ')[0]}`;
+
+                details = (
+                  <div className="space-y-4">
+                    <div className="bg-primary/5 p-4 rounded-xl border border-primary/10 space-y-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xl">🧬</span>
+                        <span className="font-bold text-primary">{geneticText}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div className="space-y-1">
+                          <p className="text-muted-foreground text-[11px] uppercase tracking-tight">Mère (Truie)</p>
+                          <p className="font-medium">{truie?.identification || '?'}</p>
+                          <p className="text-xs text-muted-foreground">{truie ? (raceLabels[truie.race] || truie.race) : ''}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-muted-foreground text-[11px] uppercase tracking-tight">Père (Verrat)</p>
+                          <p className="font-medium">{verrat?.identification || 'Inconnu'}</p>
+                          <p className="text-xs text-muted-foreground">{verrat ? (raceLabels[verrat.race] || verrat.race) : ''}</p>
+                        </div>
+                      </div>
+                    </div>
+                    {(lotPS || lotENG) && (
+                      <div className="bg-muted/30 p-4 rounded-xl space-y-2">
+                        <p className="text-xs font-bold text-muted-foreground uppercase">Informations Lot</p>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">ID Lot</span>
+                          <span className="font-medium">{(lotPS || lotENG)?.identification}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Origine</span>
+                          <span className="font-medium">{(lotPS || lotENG)?.origine}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+            }
+            
+            // Common info for all movements
+            return (
+              <div className="space-y-6 pt-4">
+                <div className="flex items-start gap-4 p-4 rounded-2xl bg-card border border-border shadow-sm">
+                  <div className={cn(
+                    "w-12 h-12 rounded-xl flex items-center justify-center",
+                    mvmt.typeMouvement === 'entree' ? "bg-success/10" : "bg-destructive/10"
+                  )}>
+                    {mvmt.typeMouvement === 'entree' ? <ArrowDownCircle className="h-6 w-6 text-success" /> : <ArrowUpCircle className="h-6 w-6 text-destructive" />}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-muted-foreground">{format(new Date(mvmt.date), "dd MMMM yyyy", { locale: fr })}</p>
+                    <h3 className="font-bold text-lg leading-tight uppercase tracking-wide">
+                      {motifLabels[mvmt.motif]} - {mvmt.quantite} {typeAnimalLabels[mvmt.typeAnimal]}
+                    </h3>
+                  </div>
+                </div>
+
+                {details}
+
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm px-1">
+                    <Info className="h-4 w-4" />
+                    <span>Informations complémentaires</span>
+                  </div>
+                  <div className="bg-muted/30 p-4 rounded-xl space-y-2">
+                    {mvmt.poids && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Poids</span>
+                        <span className="font-medium">{mvmt.poids} kg</span>
+                      </div>
+                    )}
+                    {mvmt.identification && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">ID Ref.</span>
+                        <span className="font-medium">{mvmt.identification}</span>
+                      </div>
+                    )}
+                    {mvmt.origine && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Origine</span>
+                        <span className="font-medium">{mvmt.origine}</span>
+                      </div>
+                    )}
+                    {mvmt.destination && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Destination</span>
+                        <span className="font-medium">{mvmt.destination}</span>
+                      </div>
+                    )}
+                    {mvmt.notes && (
+                      <div className="pt-2">
+                        <span className="text-xs text-muted-foreground block mb-1">Notes</span>
+                        <p className="text-sm p-3 bg-background rounded-lg border border-border italic text-muted-foreground">
+                          "{mvmt.notes}"
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <Button variant="outline" className="w-full mt-2" onClick={() => setIsDetailOpen(false)}>
+                  Fermer
+                </Button>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 };

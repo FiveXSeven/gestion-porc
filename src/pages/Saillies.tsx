@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
 import { Saillie, Truie, Verrat } from '@/types';
 import { Plus, Heart, Calendar, Search, Edit2, Trash2, Check, X, AlertTriangle } from 'lucide-react';
@@ -34,6 +35,7 @@ const statusColors: Record<Saillie['statut'], string> = {
 };
 
 const Saillies = () => {
+  const { refreshAlerts } = useAlertNotifications();
   const [saillies, setSaillies] = useState<Saillie[]>([]);
   const [truies, setTruies] = useState<Truie[]>([]);
   const [verrats, setVerrats] = useState<Verrat[]>([]);
@@ -113,11 +115,20 @@ const Saillies = () => {
         await api.addSaillie(newSaillie);
 
         // Update truie status
-        await api.updateTruie(formData.truieId, { statut: 'gestante' });
+        const truie = truies.find(t => t.id === formData.truieId);
+        await api.addAlert({
+          id: '',
+          date: new Date().toISOString(),
+          message: `Nouvelle saillie enregistrée pour la truie ${truie?.identification || 'inconnue'}. Mise bas prévue le ${format(new Date(datePrevueMiseBas), "d MMM yyyy", { locale: fr })}.`,
+          type: 'retour_chaleur',
+          read: false
+        });
+
         toast.success('Saillie enregistrée avec succès');
       }
 
       loadData();
+      refreshAlerts();
       setIsDialogOpen(false);
       resetForm();
     } catch (error) {
@@ -155,6 +166,7 @@ const Saillies = () => {
     try {
       await api.confirmSaillie(id);
       loadData();
+      refreshAlerts();
       toast.success('Saillie confirmée avec succès');
     } catch (error) {
       console.error(error);
@@ -167,6 +179,7 @@ const Saillies = () => {
       try {
         await api.failSaillie(id);
         loadData();
+        refreshAlerts();
         toast.success('Saillie marquée comme échouée');
       } catch (error) {
         console.error(error);

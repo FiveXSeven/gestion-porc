@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
 import { Portee, MiseBas, Truie, Saillie, Verrat, LotPostSevrage, Pesee } from '@/types';
 
@@ -35,6 +36,7 @@ const statusColors: Record<Portee['statut'], string> = {
 };
 
 const Portees = () => {
+  const { refreshAlerts } = useAlertNotifications();
   const [portees, setPortees] = useState<Portee[]>([]);
   const [misesBas, setMisesBas] = useState<MiseBas[]>([]);
   const [truies, setTruies] = useState<Truie[]>([]);
@@ -168,9 +170,19 @@ const Portees = () => {
         await api.updateTruie(saillie.truieId, { statut: 'allaitante' });
         await api.updateSaillie(formData.saillieId, { statut: 'confirmee' });
 
+        const truie = truies.find(t => t.id === saillie.truieId);
+        await api.addAlert({
+          id: '',
+          date: new Date().toISOString(),
+          message: `Nouvelle mise bas enregistrée pour la truie ${truie?.identification || 'inconnue'}: ${formData.nesVivants} porcelets nés vivants.`,
+          type: 'mise_bas',
+          read: false
+        });
+
         toast.success('Mise bas enregistrée avec succès');
       }
       loadData();
+      refreshAlerts();
       setIsDialogOpen(false);
       resetForm();
     } catch (error) {
@@ -311,7 +323,27 @@ const Portees = () => {
         toast.success('Portée sevrée avec succès');
       }
 
+      // Automate traceability movement (Recorded in both cases)
+      try {
+        const weanedCount = parseInt(sevrageFormData.nombreSevles);
+        const totalWeight = parseFloat(sevrageFormData.poidsTotal);
+        await api.addMouvement({
+          id: '',
+          date: sevrageFormData.date,
+          typeMouvement: 'entree',
+          typeAnimal: 'porcelet',
+          motif: 'naissance',
+          quantite: weanedCount,
+          poids: totalWeight,
+          identification: `SEVRAGE-${truie?.identification || 'UNK'}`,
+          notes: `Sevrage automatique: ${sevrageFormData.createLot ? 'Lot créé' : 'Pas de lot'}`,
+        });
+      } catch (traceError) {
+        console.error('Erreur lors de l\'automatisation de la traçabilité:', traceError);
+      }
+
       loadData();
+      refreshAlerts();
       setIsSevrageDialogOpen(false);
       setSevragePortee(null);
     } catch (error) {

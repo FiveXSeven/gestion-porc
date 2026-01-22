@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
 import { Vaccination, Traitement, LotEngraissement, LotPostSevrage, Truie } from '@/types';
 import { Syringe, Pill, Plus, Calendar, Trash2, FileText } from 'lucide-react';
@@ -20,6 +21,7 @@ const typeColors = {
 };
 
 const Sante = () => {
+  const { refreshAlerts } = useAlertNotifications();
   const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
   const [traitements, setTraitements] = useState<Traitement[]>([]);
   const [lots, setLots] = useState<LotEngraissement[]>([]);
@@ -95,9 +97,18 @@ const Sante = () => {
         notes: vaccinFormData.notes,
       });
 
+      await api.addAlert({
+        id: '',
+        date: new Date().toISOString(),
+        message: `Vaccination "${vaccinFormData.nom}" enregistrée pour ${getLotName(vaccinFormData.lotType, vaccinFormData.lotId, vaccinFormData.truieId)}`,
+        type: 'sante',
+        read: false
+      });
+
       toast.success('Vaccination enregistrée');
       setIsVaccinDialogOpen(false);
       loadData();
+      refreshAlerts();
     } catch (error) {
       console.error(error);
       toast.error('Erreur lors de l\'enregistrement');
@@ -124,9 +135,18 @@ const Sante = () => {
         notes: traitementFormData.notes,
       });
 
+      await api.addAlert({
+        id: '',
+        date: new Date().toISOString(),
+        message: `Traitement "${traitementFormData.nom}" (${traitementFormData.medicament}) enregistré pour ${getLotName(traitementFormData.lotType, traitementFormData.lotId, traitementFormData.truieId)}`,
+        type: 'sante',
+        read: false
+      });
+
       toast.success('Traitement enregistré');
       setIsTraitementDialogOpen(false);
       loadData();
+      refreshAlerts();
     } catch (error) {
       console.error(error);
       toast.error('Erreur lors de l\'enregistrement');

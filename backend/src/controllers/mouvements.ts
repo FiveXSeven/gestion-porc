@@ -19,7 +19,7 @@ interface Mouvement {
 export const getAll = async (req: Request, res: Response) => {
     try {
         const mouvements = await prisma.mouvement.findMany({
-            orderBy: { date: 'desc' }
+            orderBy: { createdAt: 'desc' }
         });
         res.json(mouvements);
     } catch (error) {
@@ -85,7 +85,7 @@ export const getByPeriod = async (req: Request, res: Response) => {
 
         const mouvements = await prisma.mouvement.findMany({
             where,
-            orderBy: { date: 'desc' }
+            orderBy: { createdAt: 'desc' }
         });
         res.json(mouvements);
     } catch (error) {

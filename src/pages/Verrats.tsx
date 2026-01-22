@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
 import { Verrat } from '@/types';
 import { Plus, Search, Edit2, Trash2, TrendingUp, AlertTriangle } from 'lucide-react';
@@ -34,6 +35,7 @@ const statusColors: Record<Verrat['statut'], string> = {
 };
 
 const Verrats = () => {
+  const { refreshAlerts } = useAlertNotifications();
   const [verrats, setVerrats] = useState<Verrat[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -109,10 +111,20 @@ const Verrats = () => {
           statut: 'actif',
         };
         await api.addVerrat(newVerrat);
+        
+        await api.addAlert({
+          id: '',
+          date: new Date().toISOString(),
+          message: `Nouveau verrat ajouté: ${formData.identification} (${raceLabels[formData.race]}).`,
+          type: 'vente', // Use vente or generic
+          read: false
+        });
+        
         toast.success('Verrat ajouté avec succès');
       }
 
       loadData();
+      refreshAlerts();
       setIsDialogOpen(false);
       resetForm();
     } catch (error) {
@@ -152,7 +164,16 @@ const Verrats = () => {
     if (confirm('Êtes-vous sûr de vouloir réformer ce verrat ?')) {
       try {
         await api.reformeVerrat(id);
+        const verrat = verrats.find(v => v.id === id);
+        await api.addAlert({
+          id: '',
+          date: new Date().toISOString(),
+          message: `Le verrat ${verrat?.identification} a été réformé.`,
+          type: 'sante',
+          read: false
+        });
         loadData();
+        refreshAlerts();
         toast.success('Verrat réformé avec succès');
       } catch (error) {
         console.error(error);
@@ -184,7 +205,7 @@ const Verrats = () => {
             if (!open) resetForm();
           }}>
             <DialogTrigger asChild>
-              <Button className="gap-2" variant="primary">
+              <Button className="gap-2" variant="default">
                 <Plus className="h-5 w-5" />
                 Ajouter un verrat
               </Button>
@@ -269,7 +290,7 @@ const Verrats = () => {
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} className="flex-1">
                     Annuler
                   </Button>
-                  <Button type="submit" variant="primary" className="flex-1">
+                  <Button type="submit" variant="default" className="flex-1">
                     {editingVerrat ? 'Modifier' : 'Enregistrer'}
                   </Button>
                 </div>

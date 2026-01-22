@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
 import { LotPostSevrage, Pesee, LotEngraissement, Mortalite } from '@/types';
 import { Plus, Scale, TrendingUp, Calendar, Target, Eye, Search, Edit2, Trash2, ArrowRight, CheckCircle, Skull } from 'lucide-react';
@@ -34,6 +35,7 @@ const statusColors: Record<LotPostSevrage['statut'], string> = {
 };
 
 const PostSevrage = () => {
+  const { refreshAlerts } = useAlertNotifications();
   const [lots, setLots] = useState<LotPostSevrage[]>([]);
   const [pesees, setPesees] = useState<Pesee[]>([]);
   const [isLotDialogOpen, setIsLotDialogOpen] = useState(false);
@@ -186,9 +188,18 @@ const PostSevrage = () => {
         };
         await api.addPesee(initialPesee);
 
+        await api.addAlert({
+          id: '',
+          date: new Date().toISOString(),
+          message: `Nouveau lot post-sevrage créé: ${lotFormData.identification} (${nombreInitial} porcelets).`,
+          type: 'sante',
+          read: false
+        });
+
         toast.success('Lot créé avec succès');
       }
       loadData();
+      refreshAlerts();
       setIsLotDialogOpen(false);
       resetLotForm();
     } catch (error) {
@@ -240,6 +251,7 @@ const PostSevrage = () => {
         });
         
         loadData();
+        refreshAlerts();
         toast.success('Lot marqué comme terminé');
       } catch (error) {
         console.error(error);
@@ -285,6 +297,7 @@ const PostSevrage = () => {
 
       // Reload data to be sure
       loadData();
+      refreshAlerts();
     } catch (error) {
       console.error(error);
       const message = error instanceof Error ? error.message : 'Erreur inconnue';
@@ -387,7 +400,44 @@ const PostSevrage = () => {
         toast.success('Lot marqué comme transféré');
       }
 
+      // Automate traceability movement
+      try {
+        const transferCount = parseInt(transferFormData.nombreTransferes);
+        const totalWeight = parseFloat(transferFormData.poidsTotal);
+        
+        // 1. Record Sortie from Post-Sevrage
+        await api.addMouvement({
+          id: '',
+          date: transferFormData.date,
+          typeMouvement: 'sortie',
+          typeAnimal: 'porcelet',
+          motif: 'transfert',
+          quantite: transferCount,
+          poids: totalWeight,
+          identification: transferLot.identification,
+          destination: 'Engraissement',
+          notes: 'Transfert automatique vers engraissement',
+        });
+
+        // 2. Record Entrée to Engraissement
+        await api.addMouvement({
+          id: '',
+          date: transferFormData.date,
+          typeMouvement: 'entree',
+          typeAnimal: 'porc_engraissement',
+          motif: 'transfert',
+          quantite: transferCount,
+          poids: totalWeight,
+          identification: `LOT-ENG-${transferLot.identification.replace('LOT-PS-', '')}`,
+          origine: 'Post-Sevrage',
+          notes: 'Transfert automatique depuis post-sevrage',
+        });
+      } catch (traceError) {
+        console.error('Erreur lors de l\'automatisation de la traçabilité:', traceError);
+      }
+
       loadData();
+      refreshAlerts();
       setIsTransferDialogOpen(false);
       setTransferLot(null);
     } catch (error) {
@@ -431,9 +481,21 @@ const PostSevrage = () => {
         lotPostSevrageId: mortaliteLot.id,
       });
 
+      await api.addMouvement({
+        id: '',
+        date: mortaliteFormData.date,
+        typeMouvement: 'sortie',
+        typeAnimal: 'porcelet',
+        motif: 'mortalite',
+        quantite: nombre,
+        identification: mortaliteLot.identification,
+        notes: `Mortalité automatique: ${mortaliteFormData.cause} - ${mortaliteFormData.notes}`,
+      });
+
       toast.success('Mortalité enregistrée');
       setIsMortaliteDialogOpen(false);
       loadData();
+      refreshAlerts();
     } catch (error) {
       console.error(error);
       toast.error('Erreur lors de l\'enregistrement');

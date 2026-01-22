@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
 import { LotEngraissement, Pesee, Mortalite } from '@/types';
 import { Plus, Scale, TrendingUp, Calendar, Target, Eye, Search, Edit2, Trash2, CheckCircle, Skull } from 'lucide-react';
@@ -31,6 +32,7 @@ const statusColors: Record<LotEngraissement['statut'], string> = {
 };
 
 const Engraissement = () => {
+  const { refreshAlerts } = useAlertNotifications();
   const [lots, setLots] = useState<LotEngraissement[]>([]);
   const [pesees, setPesees] = useState<Pesee[]>([]);
   const [isLotDialogOpen, setIsLotDialogOpen] = useState(false);
@@ -178,10 +180,19 @@ const Engraissement = () => {
           toast.warning('Lot créé mais erreur lors de la pesée initiale');
         }
 
+        await api.addAlert({
+          id: '',
+          date: new Date().toISOString(),
+          message: `Nouveau lot d'engraissement créé: ${lotFormData.identification} (${nombreInitial} porcs).`,
+          type: 'engraissement_pret',
+          read: false
+        });
+
         toast.success('Lot créé avec succès');
       }
 
       loadData();
+      refreshAlerts();
       setIsLotDialogOpen(false);
       resetLotForm();
     } catch (error) {
@@ -233,6 +244,7 @@ const Engraissement = () => {
         });
         
         loadData();
+        refreshAlerts();
         toast.success('Lot marqué comme terminé');
       } catch (error) {
         console.error(error);
@@ -276,9 +288,21 @@ const Engraissement = () => {
         lotEngraissementId: mortaliteLot.id,
       });
 
+      await api.addMouvement({
+        id: '',
+        date: mortaliteFormData.date,
+        typeMouvement: 'sortie',
+        typeAnimal: 'porc_engraissement',
+        motif: 'mortalite',
+        quantite: nombre,
+        identification: mortaliteLot.identification,
+        notes: `Mortalité automatique: ${mortaliteFormData.cause} - ${mortaliteFormData.notes}`,
+      });
+
       toast.success('Mortalité enregistrée');
       setIsMortaliteDialogOpen(false);
       loadData();
+      refreshAlerts();
     } catch (error) {
       console.error(error);
       toast.error('Erreur lors de l\'enregistrement');
@@ -313,6 +337,7 @@ const Engraissement = () => {
       await api.addPesee(newPesee);
       toast.success('Pesée enregistrée');
       loadData();
+      refreshAlerts();
       setIsPeseeDialogOpen(false);
       resetPeseeForm();
       setSelectedLotId(null);
