@@ -6,7 +6,15 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import * as api from '@/lib/api';
-import { Portee, MiseBas, Truie, Saillie, LotPostSevrage, Pesee } from '@/types';
+import { Portee, MiseBas, Truie, Saillie, Verrat, LotPostSevrage, Pesee } from '@/types';
+
+const raceLabels: Record<string, string> = {
+  large_white: 'Large White',
+  landrace: 'Landrace',
+  pietrain: 'Piétrain',
+  duroc: 'Duroc',
+  autre: 'Autre',
+};
 import { Plus, PiggyBank, Scale, Search, Edit2, Trash2, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -31,6 +39,7 @@ const Portees = () => {
   const [misesBas, setMisesBas] = useState<MiseBas[]>([]);
   const [truies, setTruies] = useState<Truie[]>([]);
   const [saillies, setSaillies] = useState<Saillie[]>([]);
+  const [verrats, setVerrats] = useState<Verrat[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
     saillieId: '',
@@ -59,16 +68,18 @@ const Portees = () => {
 
   const loadData = async () => {
     try {
-      const [porteesData, misesBasData, truiesData, sailliesData] = await Promise.all([
+      const [porteesData, misesBasData, truiesData, sailliesData, verratsData] = await Promise.all([
         api.getPortees(),
         api.getMisesBas(),
         api.getTruies(),
-        api.getSaillies()
+        api.getSaillies(),
+        api.getVerrats()
       ]);
       setPortees(porteesData);
       setMisesBas(misesBasData);
       setTruies(truiesData);
       setSaillies(sailliesData);
+      setVerrats(verratsData);
     } catch (error) {
       console.error(error);
       toast.error('Erreur lors du chargement des données');
@@ -227,7 +238,10 @@ const Portees = () => {
       if (sevrageFormData.createLot) {
         const weanedCount = parseInt(sevrageFormData.nombreSevles);
         const totalWeight = parseFloat(sevrageFormData.poidsTotal);
-        const avgWeight = Math.round((totalWeight / weanedCount) * 100) / 100;
+        // Avoid division by zero
+        const avgWeight = weanedCount > 0 
+          ? Math.round((totalWeight / weanedCount) * 100) / 100 
+          : 0;
 
         const newLotData: LotPostSevrage = {
           id: '',
@@ -245,17 +259,25 @@ const Portees = () => {
         };
 
         const createdLot = await api.addLotPostSevrage(newLotData);
+        console.log('Lot Post-Sevrage créé:', createdLot.id, createdLot.identification);
 
-        // Add initial weighing
-        const initialPeseeData: Pesee = {
-          id: '',
-          lotId: createdLot.id,
-          date: sevrageFormData.date,
-          poidsMoyen: avgWeight,
-          nombrePeses: weanedCount,
-          notes: 'Pesée de sevrage',
-        };
-        await api.addPesee(initialPeseeData);
+        // Add initial weighing - with error handling
+        try {
+          const initialPeseeData: Pesee = {
+            id: '',
+            lotId: createdLot.id,
+            date: sevrageFormData.date,
+            poidsMoyen: avgWeight,
+            nombrePeses: weanedCount,
+            notes: 'Pesée de sevrage',
+          };
+          const createdPesee = await api.addPesee(initialPeseeData);
+          console.log('Pesée initiale créée:', createdPesee.id, 'pour lot:', createdLot.id);
+        } catch (peseeError) {
+          console.error('Erreur création pesée initiale:', peseeError);
+          // Still continue - lot was created successfully
+          toast.warning('Lot créé mais erreur lors de l\'enregistrement de la pesée initiale');
+        }
 
         // Create alert for sevrage completion
         await api.addAlert({
@@ -600,6 +622,44 @@ const Portees = () => {
                       </div>
                     )}
                   </div>
+
+                  {/* Traçabilité génétique - Affichage du verrat père */}
+                  {(() => {
+                    const saillie = miseBas ? saillies.find(s => s.id === miseBas.saillieId) : null;
+                    const verrat = saillie?.verratId ? verrats.find(v => v.id === saillie.verratId) : null;
+                    if (verrat) {
+                      const truieRaceLabel = truie?.race ? (raceLabels[truie.race] || truie.race) : 'Inconnue';
+                      const verratRaceLabel = raceLabels[verrat.race] || verrat.race;
+
+                      const geneticText = (!truie || truie.race === verrat.race) 
+                        ? `Race Pure: ${verratRaceLabel}`
+                        : `Croisement: ${truieRaceLabel.split(' ')[0]} x ${verratRaceLabel.split(' ')[0]}`;
+
+                      return (
+                        <div className="mb-3 p-3 rounded-lg bg-primary/5 border border-primary/10">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-lg">🧬</span>
+                            <div>
+                              <p className="text-sm font-bold text-primary">
+                                {geneticText}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-1">
+                              <span className="font-semibold text-pink-500">Mère:</span>
+                              {truie ? (raceLabels[truie.race] || truie.race) : '?'}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="font-semibold text-blue-500">Père:</span>
+                              {raceLabels[verrat.race] || verrat.race}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
 
                   {miseBas && (
                     <div className="space-y-2 text-sm">

@@ -17,7 +17,7 @@ import {
   Package,
   HeartPulse,
   FileText,
-  Crown
+  ClipboardList
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,7 @@ const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Tableau de bord' },
   { to: '/alertes', icon: Bell, label: 'Alertes' },
   { to: '/truies', icon: PiggyBank, label: 'Truies' },
+  { to: '/verrats', icon: PiggyBank, label: 'Verrats' },
   { to: '/saillies', icon: Heart, label: 'Saillies' },
   { to: '/portees', icon: PiggyBank, label: 'Portées' },
   { to: '/post-sevrage', icon: Layers, label: 'Post-Sevrage' },
@@ -36,6 +37,7 @@ const navItems = [
   { to: '/stock-aliment', icon: Package, label: 'Stock Aliment' },
   { to: '/ventes', icon: ShoppingCart, label: 'Ventes' },
   { to: '/depenses', icon: Receipt, label: 'Dépenses' },
+  { to: '/tracabilite', icon: ClipboardList, label: 'Traçabilité' },
   { to: '/rapports', icon: FileText, label: 'Rapports' },
 ];
 

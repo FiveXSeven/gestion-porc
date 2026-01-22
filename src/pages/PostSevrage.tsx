@@ -82,6 +82,14 @@ const PostSevrage = () => {
 
   useEffect(() => {
     loadData();
+    
+    // Reload data when window gets focus (user returns to page from another tab/page)
+    const handleFocus = () => {
+      console.log('PostSevrage: Window focus, reloading data...');
+      loadData();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
   const loadData = async () => {
@@ -265,20 +273,22 @@ const PostSevrage = () => {
         notes: peseeFormData.notes,
       };
 
-      await api.addPesee(newPesee);
+      const createdPesee = await api.addPesee(newPesee);
       toast.success('Pesée enregistrée');
-      loadData();
+      
+      // Update local state immediately
+      setPesees(prev => [...prev, { ...createdPesee, lotId: selectedLotId }]);
+      
       setIsPeseeDialogOpen(false);
       resetPeseeForm();
       setSelectedLotId(null);
 
-      // Update detail view if open
-      if (detailLot && detailLot.id === selectedLotId) {
-        setDetailLot(lot);
-      }
+      // Reload data to be sure
+      loadData();
     } catch (error) {
       console.error(error);
-      toast.error('Erreur lors de l\'enregistrement de la pesée');
+      const message = error instanceof Error ? error.message : 'Erreur inconnue';
+      toast.error(`Erreur lors de l'enregistrement: ${message}`);
     }
   };
 
@@ -431,11 +441,48 @@ const PostSevrage = () => {
   };
 
   const getPeseesForLot = (lotId: string) => {
-    return pesees.filter(p => p.lotId === lotId).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const lotPesees = pesees.filter(p => p.lotId === lotId);
+    if (lotPesees.length === 0) {
+      // Debug: Log when no pesées found for a lot
+      console.log(`Aucune pesée trouvée pour lot ${lotId}. Total pesées en mémoire: ${pesees.length}`);
+      if (pesees.length > 0) {
+        console.log('Exemple de pesée:', pesees[0]);
+      }
+    }
+    return lotPesees.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  };
+
+  const getAugmentedPesees = (lot: LotPostSevrage): Pesee[] => {
+    const realPesees = getPeseesForLot(lot.id);
+    
+    // Create virtual start pesée from lot data
+    const virtualPesee: Pesee = {
+      id: 'virtual-start',
+      lotId: lot.id,
+      date: lot.dateEntree,
+      poidsMoyen: lot.poidsEntree,
+      nombrePeses: lot.nombreInitial,
+      notes: 'Poids entrée (virtuel)'
+    };
+
+    if (realPesees.length === 0) return [virtualPesee];
+
+    // Check if the first real pesée matches the entry date (approx)
+    // or if it is strictly after the entry date
+    const firstPesee = realPesees[0];
+    const firstDate = new Date(firstPesee.date).toISOString().split('T')[0];
+    const entreeDate = new Date(lot.dateEntree).toISOString().split('T')[0];
+
+    if (firstDate > entreeDate) {
+      return [virtualPesee, ...realPesees];
+    }
+
+    return realPesees;
   };
 
   const calculateGMQ = (lot: LotPostSevrage): number | null => {
-    const lotPesees = getPeseesForLot(lot.id);
+    // Use augmented pesées to ensure we have a start point
+    const lotPesees = getAugmentedPesees(lot);
     if (lotPesees.length < 2) return null;
 
     const firstPesee = lotPesees[0];
@@ -447,8 +494,8 @@ const PostSevrage = () => {
     return Math.round(((lastPesee.poidsMoyen - firstPesee.poidsMoyen) / days) * 1000) / 1000;
   };
 
-  const calculateDaysToTarget = (lot: LotPostSevrage): number | null => {
-    const lotPesees = getPeseesForLot(lot.id);
+  const calculateDaysToTarget = (lot: LotPostSevrage, fallbackGmq?: number | null): number | null => {
+    const lotPesees = getAugmentedPesees(lot); // Use augmented here too
     if (lotPesees.length === 0) return null;
 
     const lastPesee = lotPesees[lotPesees.length - 1];
@@ -456,9 +503,14 @@ const PostSevrage = () => {
     // If current weight >= target, return 0 (target reached!)
     if (lastPesee.poidsMoyen >= lot.poidsCible) return 0;
     
-    const gmq = calculateGMQ(lot);
+    let gmq = calculateGMQ(lot);
+    
+    // Fix: If no specific GMQ (e.g. only 1 pesée), use fallback (farm average)
+    if ((!gmq || gmq <= 0) && fallbackGmq) {
+      gmq = fallbackGmq;
+    }
 
-    // If no GMQ available, we can't estimate days but we know target not reached
+    // If still no GMQ available, we can't estimate days
     if (!gmq || gmq <= 0) return null;
 
     const remainingWeight = lot.poidsCible - lastPesee.poidsMoyen;
@@ -474,11 +526,11 @@ const PostSevrage = () => {
   const lotsEnCours = lots.filter(l => l.statut === 'en_cours');
   const totalAnimaux = lotsEnCours.reduce((sum, l) => sum + l.nombreActuel, 0);
 
-  // Calculate average GMQ
-  const gmqValues = lotsEnCours.map(l => calculateGMQ(l)).filter((g): g is number => g !== null);
+  // Calculate average GMQ for stat cards and fallback
+  const gmqValues = lotsEnCours.map(l => calculateGMQ(l)).filter((g): g is number => g !== null && g > 0);
   const avgGMQ = gmqValues.length > 0
     ? Math.round((gmqValues.reduce((a, b) => a + b, 0) / gmqValues.length) * 1000) / 1000
-    : null;
+    : 0.45; // Default fallback if no data at all (0.45 kg/day standard)
 
   return (
     <MainLayout>
@@ -857,16 +909,69 @@ const PostSevrage = () => {
                       <p className="text-xs text-muted-foreground">GMQ (kg/j)</p>
                     </div>
                     <div className="p-3 rounded-xl bg-accent/10 text-center">
-                      <p className="text-2xl font-bold text-accent">{calculateDaysToTarget(detailLot) ?? '-'}</p>
-                      <p className="text-xs text-muted-foreground">Jours restants</p>
+                      <p className="text-2xl font-bold text-accent">{calculateDaysToTarget(detailLot, avgGMQ) ?? '-'}</p>
+                      <p className="text-xs text-muted-foreground">Jours restants (est.)</p>
                     </div>
                   </div>
+
+                  {/* Progress bar */}
+                  {(() => {
+                    const lastWeight = getLastWeight(detailLot.id);
+                    const currentWeight = lastWeight || detailLot.poidsEntree;
+                    const progress = Math.min(100, Math.round((currentWeight / detailLot.poidsCible) * 100));
+                    const daysToTarget = calculateDaysToTarget(detailLot, avgGMQ);
+                    const estimatedEndDate = daysToTarget && daysToTarget > 0 
+                      ? format(new Date(Date.now() + daysToTarget * 24 * 60 * 60 * 1000), 'd MMM yyyy', { locale: fr })
+                      : null;
+
+                    return (
+                      <div className="space-y-3">
+                        <div>
+                          <div className="flex justify-between text-sm mb-2">
+                            <span className="text-muted-foreground">Progression vers {detailLot.poidsCible} kg</span>
+                            <span className="font-medium text-foreground">{progress}%</span>
+                          </div>
+                          <div className="h-3 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className={cn(
+                                "h-full rounded-full transition-all duration-500",
+                                progress >= 100 ? "bg-success" : "bg-primary"
+                              )}
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                          <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                            <span>{detailLot.poidsEntree} kg (entrée)</span>
+                            <span>{currentWeight} kg (actuel)</span>
+                            <span>{detailLot.poidsCible} kg (cible)</span>
+                          </div>
+                        </div>
+
+                        {estimatedEndDate && (
+                          <div className="flex items-center gap-2 p-3 rounded-xl bg-info/10 text-info">
+                            <Calendar className="h-4 w-4" />
+                            <span className="text-sm font-medium">
+                              Fin estimée: {estimatedEndDate}
+                              {!calculateGMQ(detailLot) && <span className="text-xs opacity-70 ml-1">(basée sur moy. élevage)</span>}
+                            </span>
+                          </div>
+                        )}
+
+                        {progress >= 100 && (
+                          <div className="flex items-center gap-2 p-3 rounded-xl bg-success/10 text-success">
+                            <Target className="h-4 w-4" />
+                            <span className="text-sm font-medium">Poids cible atteint !</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Chart */}
                   <div className="h-64">
                     <h4 className="font-semibold text-foreground mb-3">Évolution du poids</h4>
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={getPeseesForLot(detailLot.id).map(p => ({
+                      <LineChart data={getAugmentedPesees(detailLot).map(p => ({
                         date: format(new Date(p.date), 'd MMM', { locale: fr }),
                         poids: p.poidsMoyen,
                       }))}>
@@ -902,10 +1007,11 @@ const PostSevrage = () => {
                   <div>
                     <h4 className="font-semibold text-foreground mb-3">Historique des pesées</h4>
                     <div className="space-y-2">
-                      {getPeseesForLot(detailLot.id).reverse().map((pesee) => (
+                      {getAugmentedPesees(detailLot).reverse().map((pesee) => (
                         <div key={pesee.id} className="flex justify-between items-center p-3 rounded-lg bg-muted/30">
                           <span className="text-muted-foreground">
                             {format(new Date(pesee.date), 'd MMM yyyy', { locale: fr })}
+                            {pesee.id === 'virtual-start' && <span className="ml-2 text-xs opacity-70">(Initiale)</span>}
                           </span>
                           <span className="font-semibold text-foreground">{pesee.poidsMoyen} kg</span>
                         </div>
@@ -939,9 +1045,11 @@ const PostSevrage = () => {
           ) : (
             filteredLots.map((lot, index) => {
               const gmq = calculateGMQ(lot);
-              const daysToTarget = calculateDaysToTarget(lot);
+              const daysToTarget = calculateDaysToTarget(lot, avgGMQ);
               const lastWeight = getLastWeight(lot.id);
-              const progress = lastWeight ? Math.min(100, Math.round((lastWeight / lot.poidsCible) * 100)) : 0;
+              const currentWeight = lastWeight || lot.poidsEntree; // Fallback to entrance weight
+              const progress = Math.min(100, Math.round((currentWeight / lot.poidsCible) * 100));
+              const targetReached = currentWeight >= lot.poidsCible;
 
               return (
                 <div
@@ -993,7 +1101,7 @@ const PostSevrage = () => {
                   <div className="mb-4">
                     <div className="flex justify-between text-sm mb-1">
                       <span className="text-muted-foreground">Progression</span>
-                      <span className="font-medium text-foreground">{lastWeight || lot.poidsEntree} / {lot.poidsCible} kg</span>
+                      <span className="font-medium text-foreground">{currentWeight} / {lot.poidsCible} kg</span>
                     </div>
                     <div className="h-2 rounded-full bg-muted overflow-hidden">
                       <div
@@ -1013,8 +1121,10 @@ const PostSevrage = () => {
                       </p>
                     </div>
                     <div className="p-3 rounded-xl bg-success/10 text-center">
-                      <p className="text-lg font-bold text-success">{gmq || '-'}</p>
-                      <p className="text-xs text-muted-foreground">GMQ (kg/j)</p>
+                      <p className="text-lg font-bold text-success">
+                        {gmq ? gmq : (avgGMQ && lot.statut === 'en_cours' ? `~${avgGMQ}` : '-')}
+                      </p>
+                      <p className="text-xs text-muted-foreground">GMQ (kg/j){!gmq && avgGMQ && lot.statut === 'en_cours' ? ' (est.)' : ''}</p>
                     </div>
                   </div>
 
@@ -1046,7 +1156,7 @@ const PostSevrage = () => {
                       <Eye className="h-4 w-4" />
                       Détails
                     </Button>
-                    {lot.statut === 'en_cours' && (
+                    {lot.statut === 'en_cours' && !targetReached && (
                       <Button
                         size="sm"
                         className="flex-1 gap-1"

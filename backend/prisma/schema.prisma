@@ -10,6 +10,7 @@ datasource db {
 model Truie {
   id             String   @id @default(cuid())
   identification String   @unique
+  race           String   @default("large_white") // 'large_white' | 'landrace' | 'pietrain' | 'duroc' | 'autre'
   dateEntree     DateTime
   dateNaissance  DateTime
   poids          Float
@@ -27,10 +28,27 @@ model Truie {
 
 
 
+model Verrat {
+  id             String   @id @default(cuid())
+  identification String   @unique
+  race           String   // 'large_white' | 'landrace' | 'pietrain' | 'duroc' | 'autre'
+  dateNaissance  DateTime
+  dateEntree     DateTime
+  poids          Float
+  statut         String   // 'actif' | 'reforme' | 'vendu'
+  notes          String   @default("")
+  
+  saillies       Saillie[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
 model Saillie {
   id                 String   @id @default(cuid())
   truieId            String
   truie              Truie    @relation(fields: [truieId], references: [id])
+  verratId           String?
+  verrat             Verrat?  @relation(fields: [verratId], references: [id])
   date               DateTime
   methode            String   // 'naturelle' | 'insemination'
   employe            String
@@ -230,4 +248,20 @@ model Traitement {
   truieId     String?
   notes       String   @default("")
   createdAt   DateTime @default(now())
+}
+
+// Traçabilité - Registre des mouvements d'animaux
+model Mouvement {
+  id              String   @id @default(cuid())
+  date            DateTime
+  typeMouvement   String   // 'entree' | 'sortie'
+  typeAnimal      String   // 'truie' | 'verrat' | 'porcelet' | 'porc_engraissement'
+  motif           String   // 'naissance' | 'achat' | 'vente' | 'mortalite' | 'reforme' | 'transfert'
+  quantite        Int
+  identification  String?  // ID de l'animal ou du lot concerné
+  origine         String?  // Pour entrées: provenance (élevage, fournisseur)
+  destination     String?  // Pour sorties: destination (acheteur, abattoir)
+  poids           Float?   // Poids total ou moyen
+  notes           String   @default("")
+  createdAt       DateTime @default(now())
 }

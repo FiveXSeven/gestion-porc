@@ -1,10 +1,11 @@
-import { User, Truie, Saillie, MiseBas, Portee, Vente, Depense, Alert, LotEngraissement, LotPostSevrage, Pesee, StockAliment, Mortalite, ConsommationAliment, Vaccination, Traitement } from '@/types';
+import { User, Truie, Verrat, Saillie, MiseBas, Portee, Vente, Depense, Alert, LotEngraissement, LotPostSevrage, Pesee, StockAliment, Mortalite, ConsommationAliment, Vaccination, Traitement, Mouvement } from '@/types';
 
 const API_URL = 'http://localhost:3000/api';
 
 async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const response = await fetch(`${API_URL}${endpoint}`, {
         ...options,
+        cache: 'no-store',
         headers: {
             'Content-Type': 'application/json',
             ...options?.headers,
@@ -29,7 +30,13 @@ export const addTruie = (item: Truie) => fetchJson<Truie>('/truies', { method: '
 export const updateTruie = (id: string, updates: Partial<Truie>) => fetchJson<Truie>(`/truies/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
 export const deleteTruie = (id: string) => fetchJson<void>(`/truies/${id}`, { method: 'DELETE' });
 
-
+// Verrats
+export const getVerrats = () => fetchJson<Verrat[]>('/verrats');
+export const addVerrat = (item: Verrat) => fetchJson<Verrat>('/verrats', { method: 'POST', body: JSON.stringify(item) });
+export const updateVerrat = (id: string, updates: Partial<Verrat>) => fetchJson<Verrat>(`/verrats/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
+export const deleteVerrat = (id: string) => fetchJson<void>(`/verrats/${id}`, { method: 'DELETE' });
+export const reformeVerrat = (id: string) => fetchJson<Verrat>(`/verrats/${id}/reforme`, { method: 'POST' });
+export const getVerratStats = (id: string) => fetchJson<{ totalSaillies: number; confirmees: number; echouees: number; enCours: number; tauxReussite: number }>(`/verrats/${id}/stats`);
 
 // Saillies
 export const getSaillies = () => fetchJson<Saillie[]>('/saillies');
@@ -72,7 +79,6 @@ export const markAlertRead = (id: string) => updateAlert(id, { read: true });
 export const generateAlerts = () => fetchJson<{ success: boolean; alertsGenerated: { miseBasAlerts: number; postSevrageAlerts: number; engraissementAlerts: number } }>('/alerts/generate', { method: 'POST' });
 
 // Lots d'engraissement
-// Lots d'engraissement
 export const getLotsEngraissement = () => fetchJson<LotEngraissement[]>('/lots-engraissement');
 export const addLotEngraissement = (item: LotEngraissement) => fetchJson<LotEngraissement>('/lots-engraissement', { method: 'POST', body: JSON.stringify(item) });
 export const updateLotEngraissement = (id: string, updates: Partial<LotEngraissement>) => fetchJson<LotEngraissement>(`/lots-engraissement/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
@@ -87,11 +93,8 @@ export const deleteLotPostSevrage = (id: string) => fetchJson<void>(`/lots-post-
 export const markLotPostSevrageReady = (id: string) => fetchJson<LotPostSevrage>(`/lots-post-sevrage/${id}/mark-ready`, { method: 'POST' });
 
 // Pesées
-// Note: getPesees returns all pesees. We'll simulate getPeseesForLot by filtering on client side for now, 
-// or optimally add a query param to backend.
 export const getPesees = () => fetchJson<Pesee[]>('/pesees');
 export const addPesee = (item: Pesee) => fetchJson<Pesee>('/pesees', { method: 'POST', body: JSON.stringify(item) });
-// Helper to match old storage API - Warning: fetch all is not efficient but okay for mvp
 export const getPeseesForLot = async (lotId: string): Promise<Pesee[]> => {
     const all = await getPesees();
     return all.filter(p => p.lotId === lotId).sort((a, b) =>
@@ -105,9 +108,8 @@ export const addStockAliment = (item: StockAliment) => fetchJson<StockAliment>('
 export const updateStockAliment = (id: string, updates: Partial<StockAliment>) => fetchJson<StockAliment>(`/stock-aliments/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
 export const deleteStockAliment = (id: string) => fetchJson<void>(`/stock-aliments/${id}`, { method: 'DELETE' });
 
-// Demo Data Initialization - skipped for API as backend should persist.
+// Demo Data Initialization
 export const initializeDemoData = async () => {
-    // Optional: Call a backend endpoint to seed data if needed
     console.log("Demo data initialization should be handled by backend seeding.");
 };
 
@@ -132,3 +134,23 @@ export const deleteVaccination = (id: string) => fetchJson<void>(`/sante/vaccina
 export const getTraitements = () => fetchJson<Traitement[]>('/sante/traitements');
 export const addTraitement = (item: Traitement) => fetchJson<Traitement>('/sante/traitements', { method: 'POST', body: JSON.stringify(item) });
 export const deleteTraitement = (id: string) => fetchJson<void>(`/sante/traitements/${id}`, { method: 'DELETE' });
+
+// Mouvements (Traçabilité)
+export const getMouvements = () => fetchJson<Mouvement[]>('/mouvements');
+export const addMouvement = (item: Mouvement) => fetchJson<Mouvement>('/mouvements', { method: 'POST', body: JSON.stringify(item) });
+export const deleteMouvement = (id: string) => fetchJson<void>(`/mouvements/${id}`, { method: 'DELETE' });
+export const getMouvementsFiltered = (params: { startDate?: string; endDate?: string; typeAnimal?: string; typeMouvement?: string }) => {
+    const query = new URLSearchParams();
+    if (params.startDate) query.append('startDate', params.startDate);
+    if (params.endDate) query.append('endDate', params.endDate);
+    if (params.typeAnimal) query.append('typeAnimal', params.typeAnimal);
+    if (params.typeMouvement) query.append('typeMouvement', params.typeMouvement);
+    return fetchJson<Mouvement[]>(`/mouvements/filter?${query.toString()}`);
+};
+export const getMouvementsStats = () => fetchJson<{
+    totalEntrees: number;
+    totalSorties: number;
+    solde: number;
+    parTypeAnimal: Record<string, { entrees: number; sorties: number }>;
+    parMotif: Record<string, number>;
+}>('/mouvements/stats');

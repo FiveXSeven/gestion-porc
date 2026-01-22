@@ -20,6 +20,7 @@ export const create = async (req: Request, res: Response) => {
         const newTruie = await prisma.truie.create({
             data: {
                 identification: data.identification,
+                race: data.race,
                 dateEntree: new Date(data.dateEntree),
                 dateNaissance: new Date(data.dateNaissance),
                 poids: data.poids,

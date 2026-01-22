@@ -13,6 +13,14 @@ import { format, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
+const raceLabels: Record<string, string> = {
+  large_white: 'Large White',
+  landrace: 'Landrace',
+  pietrain: 'Piétrain',
+  duroc: 'Duroc',
+  autre: 'Autre',
+};
+
 const statusLabels: Record<Truie['statut'], string> = {
   active: 'Active',
   gestante: 'Gestante',
@@ -44,6 +52,7 @@ const Truies = () => {
   
   const [formData, setFormData] = useState({
     identification: '',
+    race: 'large_white' as Truie['race'],
     dateEntree: '',
     dateNaissance: '',
     poids: '',
@@ -68,6 +77,7 @@ const Truies = () => {
   const resetForm = () => {
     setFormData({
       identification: '',
+      race: 'large_white',
       dateEntree: '',
       dateNaissance: '',
       poids: '',
@@ -115,6 +125,7 @@ const Truies = () => {
     setEditingTruie(truie);
     setFormData({
       identification: truie.identification,
+      race: truie.race,
       dateEntree: truie.dateEntree.split('T')[0], // Ensure format YYYY-MM-DD
       dateNaissance: truie.dateNaissance.split('T')[0],
       poids: truie.poids.toString(),
@@ -221,6 +232,24 @@ const Truies = () => {
                     onChange={(e) => setFormData(prev => ({ ...prev, identification: e.target.value }))}
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="race">Race *</Label>
+                  <Select
+                    value={formData.race}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, race: value as Truie['race'] }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="large_white">Large White</SelectItem>
+                      <SelectItem value="landrace">Landrace</SelectItem>
+                      <SelectItem value="pietrain">Piétrain</SelectItem>
+                      <SelectItem value="duroc">Duroc</SelectItem>
+                      <SelectItem value="autre">Autre</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="dateEntree">Date d'entrée *</Label>
@@ -322,6 +351,7 @@ const Truies = () => {
               <thead className="bg-muted/50 border-b border-border">
                 <tr>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-foreground">Identification</th>
+                  <th className="text-left py-4 px-6 text-sm font-semibold text-foreground">Race</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-foreground">Date d'entrée</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-foreground">Poids</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-foreground">Statut</th>
@@ -351,6 +381,9 @@ const Truies = () => {
                           </div>
                           <span className="font-semibold text-foreground">{truie.identification}</span>
                         </div>
+                      </td>
+                      <td className="py-4 px-6 text-muted-foreground">
+                        {raceLabels[truie.race] || truie.race}
                       </td>
                       <td className="py-4 px-6 text-muted-foreground">
                         {format(new Date(truie.dateEntree), "d MMM yyyy", { locale: fr })}
@@ -447,6 +480,10 @@ const Truies = () => {
                       <span className={cn("px-2 py-1 rounded-full text-xs font-medium border", statusColors[detailTruie.statut])}>
                         {statusLabels[detailTruie.statut]}
                       </span>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Race</p>
+                      <p className="font-semibold">{raceLabels[detailTruie.race] || detailTruie.race}</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Poids</p>

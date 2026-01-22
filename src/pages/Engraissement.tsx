@@ -69,6 +69,13 @@ const Engraissement = () => {
 
   useEffect(() => {
     loadData();
+    
+    const handleFocus = () => {
+      console.log('Engraissement: Window focus, reloading data...');
+      loadData();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
   const loadData = async () => {
@@ -154,16 +161,22 @@ const Engraissement = () => {
 
         const createdLot = await api.addLotEngraissement(newLot);
 
-        // Add initial weighing
-        const initialPesee: Pesee = {
-          id: '',
-          lotId: createdLot.id,
-          date: lotFormData.dateEntree,
-          poidsMoyen: poidsEntree,
-          nombrePeses: nombreInitial,
-          notes: 'Pesée d\'entrée',
-        };
-        await api.addPesee(initialPesee);
+        // Add initial weighing - with error handling
+        try {
+          const initialPesee: Pesee = {
+            id: '',
+            lotId: createdLot.id,
+            date: lotFormData.dateEntree,
+            poidsMoyen: poidsEntree,
+            nombrePeses: nombreInitial,
+            notes: 'Pesée d\'entrée',
+          };
+          const createdPesee = await api.addPesee(initialPesee);
+          console.log('Pesée initiale créée:', createdPesee.id);
+        } catch (peseeError) {
+          console.error('Erreur création pesée initiale:', peseeError);
+          toast.warning('Lot créé mais erreur lors de la pesée initiale');
+        }
 
         toast.success('Lot créé avec succès');
       }
@@ -327,8 +340,36 @@ const Engraissement = () => {
     return pesees.filter(p => p.lotId === lotId).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   };
 
+  const getAugmentedPesees = (lot: LotEngraissement): Pesee[] => {
+    const realPesees = getPeseesForLot(lot.id);
+    
+    // Create virtual start pesée from lot data
+    const virtualPesee: Pesee = {
+      id: 'virtual-start',
+      lotId: lot.id,
+      date: lot.dateEntree,
+      poidsMoyen: lot.poidsEntree,
+      nombrePeses: lot.nombreInitial,
+      notes: 'Poids entrée (virtuel)'
+    };
+
+    if (realPesees.length === 0) return [virtualPesee];
+
+    // Check if the first real pesée matches the entry date (approx)
+    // or if it is strictly after the entry date
+    const firstPesee = realPesees[0];
+    const firstDate = new Date(firstPesee.date).toISOString().split('T')[0];
+    const entreeDate = new Date(lot.dateEntree).toISOString().split('T')[0];
+
+    if (firstDate > entreeDate) {
+      return [virtualPesee, ...realPesees];
+    }
+
+    return realPesees;
+  };
+
   const calculateGMQ = (lot: LotEngraissement): number | null => {
-    const lotPesees = getPeseesForLot(lot.id);
+    const lotPesees = getAugmentedPesees(lot);
     if (lotPesees.length < 2) return null;
 
     const firstPesee = lotPesees[0];
@@ -340,8 +381,8 @@ const Engraissement = () => {
     return Math.round(((lastPesee.poidsMoyen - firstPesee.poidsMoyen) / days) * 1000) / 1000;
   };
 
-  const calculateDaysToTarget = (lot: LotEngraissement): number | null => {
-    const lotPesees = getPeseesForLot(lot.id);
+  const calculateDaysToTarget = (lot: LotEngraissement, fallbackGmq?: number | null): number | null => {
+    const lotPesees = getAugmentedPesees(lot);
     if (lotPesees.length === 0) return null;
 
     const lastPesee = lotPesees[lotPesees.length - 1];
@@ -349,9 +390,14 @@ const Engraissement = () => {
     // If current weight >= target, return 0 (target reached!)
     if (lastPesee.poidsMoyen >= lot.poidsCible) return 0;
     
-    const gmq = calculateGMQ(lot);
+    let gmq = calculateGMQ(lot);
+    
+    // Fix: If no specific GMQ (e.g. only 1 pesée), use fallback (farm average)
+    if ((!gmq || gmq <= 0) && fallbackGmq) {
+      gmq = fallbackGmq;
+    }
 
-    // If no GMQ available, we can't estimate days but we know target not reached
+    // If still no GMQ available, we can't estimate days
     if (!gmq || gmq <= 0) return null;
 
     const remainingWeight = lot.poidsCible - lastPesee.poidsMoyen;
@@ -367,11 +413,11 @@ const Engraissement = () => {
   const lotsEnCours = lots.filter(l => l.statut === 'en_cours');
   const totalAnimaux = lotsEnCours.reduce((sum, l) => sum + l.nombreActuel, 0);
 
-  // Calculate average GMQ
-  const gmqValues = lotsEnCours.map(l => calculateGMQ(l)).filter((g): g is number => g !== null);
+  // Calculate average GMQ for stat cards and fallback
+  const gmqValues = lotsEnCours.map(l => calculateGMQ(l)).filter((g): g is number => g !== null && g > 0);
   const avgGMQ = gmqValues.length > 0
     ? Math.round((gmqValues.reduce((a, b) => a + b, 0) / gmqValues.length) * 1000) / 1000
-    : null;
+    : 0.80; // Default fallback for Engraissement (higher than PS)
 
   return (
     <MainLayout>
@@ -685,8 +731,8 @@ const Engraissement = () => {
                       <p className="text-xs text-muted-foreground">GMQ (kg/j)</p>
                     </div>
                     <div className="p-3 rounded-xl bg-accent/10 text-center">
-                      <p className="text-2xl font-bold text-accent">{calculateDaysToTarget(detailLot) ?? '-'}</p>
-                      <p className="text-xs text-muted-foreground">Jours restants</p>
+                      <p className="text-2xl font-bold text-accent">{calculateDaysToTarget(detailLot, avgGMQ) ?? '-'}</p>
+                      <p className="text-xs text-muted-foreground">Jours restants (est.)</p>
                     </div>
                   </div>
 
@@ -694,7 +740,7 @@ const Engraissement = () => {
                   <div className="h-64">
                     <h4 className="font-semibold text-foreground mb-3">Évolution du poids</h4>
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={getPeseesForLot(detailLot.id).map(p => ({
+                      <LineChart data={getAugmentedPesees(detailLot).map(p => ({
                         date: format(new Date(p.date), 'd MMM', { locale: fr }),
                         poids: p.poidsMoyen,
                       }))}>
@@ -730,10 +776,11 @@ const Engraissement = () => {
                   <div>
                     <h4 className="font-semibold text-foreground mb-3">Historique des pesées</h4>
                     <div className="space-y-2">
-                      {getPeseesForLot(detailLot.id).reverse().map((pesee) => (
+                      {getAugmentedPesees(detailLot).reverse().map((pesee) => (
                         <div key={pesee.id} className="flex justify-between items-center p-3 rounded-lg bg-muted/30">
                           <span className="text-muted-foreground">
                             {format(new Date(pesee.date), 'd MMM yyyy', { locale: fr })}
+                            {pesee.id === 'virtual-start' && <span className="ml-2 text-xs opacity-70">(Initiale)</span>}
                           </span>
                           <span className="font-semibold text-foreground">{pesee.poidsMoyen} kg</span>
                         </div>
@@ -767,9 +814,10 @@ const Engraissement = () => {
           ) : (
             filteredLots.map((lot, index) => {
               const gmq = calculateGMQ(lot);
-              const daysToTarget = calculateDaysToTarget(lot);
+              const daysToTarget = calculateDaysToTarget(lot, avgGMQ);
               const lastWeight = getLastWeight(lot.id);
-              const progress = lastWeight ? Math.min(100, Math.round((lastWeight / lot.poidsCible) * 100)) : 0;
+              const currentWeight = lastWeight || lot.poidsEntree;
+              const progress = Math.min(100, Math.round((currentWeight / lot.poidsCible) * 100));
 
               return (
                 <div
@@ -821,7 +869,7 @@ const Engraissement = () => {
                   <div className="mb-4">
                     <div className="flex justify-between text-sm mb-1">
                       <span className="text-muted-foreground">Progression</span>
-                      <span className="font-medium text-foreground">{lastWeight || lot.poidsEntree} / {lot.poidsCible} kg</span>
+                      <span className="font-medium text-foreground">{currentWeight} / {lot.poidsCible} kg</span>
                     </div>
                     <div className="h-2 rounded-full bg-muted overflow-hidden">
                       <div
@@ -841,8 +889,10 @@ const Engraissement = () => {
                       </p>
                     </div>
                     <div className="p-3 rounded-xl bg-success/10 text-center">
-                      <p className="text-lg font-bold text-success">{gmq || '-'}</p>
-                      <p className="text-xs text-muted-foreground">GMQ (kg/j)</p>
+                      <p className="text-lg font-bold text-success">
+                        {gmq ? gmq : (avgGMQ && lot.statut === 'en_cours' ? `~${avgGMQ}` : '-')}
+                      </p>
+                      <p className="text-xs text-muted-foreground">GMQ (kg/j){!gmq && avgGMQ && lot.statut === 'en_cours' ? ' (est.)' : ''}</p>
                     </div>
                   </div>
 
