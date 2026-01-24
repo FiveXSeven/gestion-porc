@@ -85,7 +85,7 @@ export const Sidebar = () => {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-2 space-y-1 overflow-y-auto scrollbar-hide">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
