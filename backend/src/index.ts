@@ -1,6 +1,8 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import { authenticateToken } from './middleware/auth';
 import truiesRoutes from './routes/truies';
@@ -21,14 +23,12 @@ import verratsRoutes from './routes/verrats';
 import mouvementsRoutes from './routes/mouvements';
 import authRoutes from './routes/auth';
 
-dotenv.config();
-
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Configuration CORS sécurisée
+// Configuration CORS
 app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173', // Ajustez selon votre port frontend
+    origin: '*', // Temporairement permissif pour le debug
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));

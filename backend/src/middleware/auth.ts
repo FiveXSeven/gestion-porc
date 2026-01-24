@@ -1,9 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'votre_cle_secrete_super_secure';
-
 export const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
+    const JWT_SECRET = process.env.JWT_SECRET || 'votre_cle_secrete_super_secure';
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 

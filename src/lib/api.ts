@@ -37,7 +37,7 @@ async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T>
         localStorage.removeItem('userEmail');
         localStorage.removeItem('isAuthenticated');
         if (typeof window !== 'undefined') {
-            window.location.href = '/login';
+            window.location.href = '/auth';
         }
     }
 

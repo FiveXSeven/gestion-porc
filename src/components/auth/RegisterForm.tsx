@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +12,7 @@ interface RegisterFormProps {
 }
 
 export const RegisterForm = ({ onToggleMode }: RegisterFormProps) => {
+  const navigate = useNavigate();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [pin, setPin] = useState('');
@@ -46,6 +48,7 @@ export const RegisterForm = ({ onToggleMode }: RegisterFormProps) => {
     
     if (success) {
       toast.success('Compte créé avec succès !');
+      navigate('/dashboard');
     } else {
       // toast.error is already handled inside AuthContext or here if needed
     }

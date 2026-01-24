@@ -3,9 +3,8 @@ import prisma from '../prisma';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'votre_cle_secrete_super_secure';
-
 export const register = async (req: Request, res: Response) => {
+    const JWT_SECRET = process.env.JWT_SECRET || 'votre_cle_secrete_super_secure';
     try {
         const { email, pin, name } = req.body;
 
@@ -35,13 +34,17 @@ export const register = async (req: Request, res: Response) => {
         const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
 
         res.status(201).json({ user: userWithoutPin, token });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Erreur lors de l\'inscription' });
+    } catch (error: any) {
+        console.error('Registration Error Details:', error);
+        res.status(500).json({ 
+            error: 'Erreur lors de l\'inscription',
+            details: error.message || 'Unknown error'
+        });
     }
 };
 
 export const login = async (req: Request, res: Response) => {
+    const JWT_SECRET = process.env.JWT_SECRET || 'votre_cle_secrete_super_secure';
     try {
         const { email, pin } = req.body;
 
