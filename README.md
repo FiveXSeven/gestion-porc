@@ -49,32 +49,58 @@ API REST robuste gérant la logique métier et les données :
 - npm
 
 ### Installation globale
-\`\`\`bash
+```bash
 npm install
 cd backend && npm install && cd ..
-\`\`\`
+```
+
+### Initialiser la Base de Données
+
+```bash
+cd backend
+npx prisma db push  # Créer la BDD
+npm run seed        # Créer les users de test
+cd ..
+```
 
 ### Lancer le projet (Développement)
 
 1. **Démarrer le Backend** :
-   \`\`\`bash
+   ```bash
    cd backend
-   npx prisma db push  # Initialiser la BDD si nécessaire
    npm run dev
-   \`\`\`
+   ```
    Le serveur API démarrera sur `http://localhost:3000`.
 
 2. **Démarrer le Frontend** (dans un nouveau terminal) :
-   \`\`\`bash
+   ```bash
    # Depuis la racine du projet
    npm run dev
-   \`\`\`
-   L'application sera accessible sur `http://localhost:8080` (ou le port indiqué).
+   ```
+   L'application sera accessible sur `http://localhost:8081`.
+
+### Identifiants de Test
+
+Après avoir exécuté `npm run seed`, utilisez ces identifiants :
+
+| Email | PIN | Rôle |
+|-------|-----|------|
+| `admin@gestion-porc.local` | `1234` | Admin |
+| `user@gestion-porc.local` | `5678` | User |
 
 ## 🧪 Tests
 
 - **Frontend** : `npm test` (à la racine) - Lance les tests de composants avec Vitest.
 - **Backend** : `cd backend && npm test` - Lance les tests unitaires et d'intégration avec Jest.
+
+## 🔒 Sécurité
+
+- ✅ CORS restrictif (localhost:8081 uniquement)
+- ✅ JWT avec secret généré automatiquement
+- ✅ Validation des entrées avec Zod
+- ✅ Rate limiting sur les endpoints d'authentification
+- ✅ Pas de vulnérabilités critiques (npm audit: 0)
+- ✅ Authentification requise sur toutes les routes protégées
 
 ---
 *Généré pour le projet Gestion Porc*
