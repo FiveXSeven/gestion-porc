@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import * as api from '@/lib/api';
 import { Alert } from '@/types';
-import { Bell, PiggyBank, Calendar, ShoppingCart, HeartPulse, Check, Trash2, Scale, Target } from 'lucide-react';
+import { Bell, PiggyBank, Calendar, ShoppingCart, HeartPulse, Check, Trash2, Scale, Target, Heart } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
 import { toast } from 'sonner';
 
 const alertIcons = {
@@ -16,6 +17,7 @@ const alertIcons = {
   sante: HeartPulse,
   post_sevrage_pret: Scale,
   engraissement_pret: Target,
+  retour_chaleur: Heart,
 };
 
 const alertColors = {
@@ -25,6 +27,7 @@ const alertColors = {
   sante: 'bg-destructive/10 text-destructive border-destructive/20',
   post_sevrage_pret: 'bg-success/10 text-success border-success/20',
   engraissement_pret: 'bg-warning/10 text-warning border-warning/20',
+  retour_chaleur: 'bg-accent/10 text-accent border-accent/20',
 };
 
 const alertLabels = {
@@ -34,11 +37,16 @@ const alertLabels = {
   sante: 'Santé',
   post_sevrage_pret: 'PS Prêt',
   engraissement_pret: 'Eng. Prêt',
+  retour_chaleur: 'Saillie',
 };
 
 const Alertes = () => {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('all');
+  
+  // Delete all dialog state
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   useEffect(() => {
     loadAlerts();
@@ -91,15 +99,18 @@ const Alertes = () => {
   };
 
   const handleDeleteAll = async () => {
-    if (confirm('Supprimer toutes les alertes ?')) {
-      try {
-        await Promise.all(alerts.map(a => api.deleteAlert(a.id)));
-        loadAlerts();
-        toast.success('Toutes les alertes ont été supprimées');
-      } catch (error) {
-        console.error(error);
-        toast.error('Erreur lors de la suppression');
-      }
+    setIsDeletingAll(true);
+    try {
+      await Promise.all(alerts.map(a => api.deleteAlert(a.id)));
+      loadAlerts();
+      toast.success('Toutes les alertes ont été supprimées');
+      setDeleteAllDialogOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+      setDeleteAllDialogOpen(false);
+    } finally {
+      setIsDeletingAll(false);
     }
   };
 
@@ -129,7 +140,7 @@ const Alertes = () => {
             </Button>
           )}
           {alerts.length > 0 && (
-            <Button variant="destructive" onClick={handleDeleteAll} className="gap-2">
+            <Button variant="destructive" onClick={() => setDeleteAllDialogOpen(true)} className="gap-2">
               <Trash2 className="h-4 w-4" />
               Tout effacer
             </Button>
@@ -223,6 +234,15 @@ const Alertes = () => {
             })
           )}
         </div>
+        {/* Delete All Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteAllDialogOpen}
+          onOpenChange={setDeleteAllDialogOpen}
+          onConfirm={handleDeleteAll}
+          title="Supprimer toutes les alertes ?"
+          description="Êtes-vous sûr de vouloir supprimer toutes les alertes ? Cette action est irréversible."
+          isLoading={isDeletingAll}
+        />
       </div>
     </MainLayout>
   );

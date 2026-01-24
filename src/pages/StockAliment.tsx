@@ -5,7 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
+import { ConstraintErrorDialog } from '@/components/ui/ConstraintErrorDialog';
 import * as api from '@/lib/api';
+import { isConstraintError } from '@/lib/api';
 import { StockAliment } from '@/types';
 import { Plus, Package, AlertTriangle, Edit2, Trash2, Search, Minus, ArrowDown, ArrowUp } from 'lucide-react';
 import { toast } from 'sonner';
@@ -36,6 +39,16 @@ const StockAlimentPage = () => {
   });
   const [movementAmount, setMovementAmount] = useState('');
 
+  // Delete dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [constraintErrorOpen, setConstraintErrorOpen] = useState(false);
+  
+  // Delete all dialog state
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
+
   useEffect(() => {
     loadStocks();
   }, []);
@@ -43,7 +56,7 @@ const StockAlimentPage = () => {
   const loadStocks = async () => {
     try {
       const data = await api.getStockAliments();
-      setStocks(data);
+      setStocks(data.sort((a, b) => new Date(b.dateMiseAJour).getTime() - new Date(a.dateMiseAJour).getTime()));
     } catch (error) {
       console.error(error);
       toast.error('Erreur lors du chargement des stocks');
@@ -110,16 +123,71 @@ const StockAlimentPage = () => {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer ce stock ?')) {
-      try {
-        await api.deleteStockAliment(id);
-        loadStocks();
-        toast.success('Stock supprimé');
-      } catch (error) {
-        console.error(error);
+  const openDeleteDialog = (id: string) => {
+    setDeletingId(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deletingId) return;
+
+    setIsDeleting(true);
+    try {
+      await api.deleteStockAliment(deletingId);
+      loadStocks();
+      toast.success('Stock supprimé');
+      setDeleteDialogOpen(false);
+    } catch (error) {
+      setDeleteDialogOpen(false);
+      if (isConstraintError(error)) {
+        setConstraintErrorOpen(true);
+      } else {
         toast.error('Erreur lors de la suppression');
       }
+      console.error(error);
+    } finally {
+      setIsDeleting(false);
+      setDeletingId(null);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    setIsDeletingAll(true);
+    let hasConstraintError = false;
+    let deletedCount = 0;
+
+    try {
+      for (const stock of stocks) {
+        try {
+          await api.deleteStockAliment(stock.id);
+          deletedCount++;
+        } catch (error) {
+          if (isConstraintError(error)) {
+            hasConstraintError = true;
+          } else {
+            throw error;
+          }
+        }
+      }
+
+      loadStocks();
+
+      if (hasConstraintError) {
+        if (deletedCount > 0) {
+          toast.warning(`${deletedCount} stocks supprimés, mais certains n'ont pas pu l'être en raison de dépendances.`);
+        }
+        setDeleteAllDialogOpen(false);
+        setConstraintErrorOpen(true);
+      } else {
+        toast.success('Tous les stocks ont été supprimés');
+        setDeleteAllDialogOpen(false);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+      setDeleteAllDialogOpen(false);
+    } finally {
+      setIsDeletingAll(false);
     }
   };
 
@@ -173,7 +241,7 @@ const StockAlimentPage = () => {
   const filteredStocks = stocks.filter(stock =>
     stock.nom.toLowerCase().includes(search.toLowerCase()) ||
     stock.type.toLowerCase().includes(search.toLowerCase())
-  );
+  ).sort((a, b) => new Date(b.dateMiseAJour).getTime() - new Date(a.dateMiseAJour).getTime());
 
   const lowStockItems = stocks.filter(s => s.quantite < 5);
 
@@ -186,16 +254,23 @@ const StockAlimentPage = () => {
             <h1 className="font-display text-3xl font-bold text-foreground">Stock Aliment</h1>
             <p className="text-muted-foreground mt-1">Gérez vos stocks d'aliments et sacs</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={(open) => {
-            setIsDialogOpen(open);
-            if (!open) resetForm();
-          }}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="h-5 w-5" />
-                Nouveau Stock
-              </Button>
-            </DialogTrigger>
+            <div className="flex flex-wrap gap-2">
+              {stocks.length > 0 && (
+                <Button variant="destructive" onClick={() => setDeleteAllDialogOpen(true)} className="gap-2">
+                  <Trash2 className="h-4 w-4" />
+                  Tout effacer
+                </Button>
+              )}
+              <Dialog open={isDialogOpen} onOpenChange={(open) => {
+                setIsDialogOpen(open);
+                if (!open) resetForm();
+              }}>
+                <DialogTrigger asChild>
+                  <Button className="gap-2">
+                    <Plus className="h-5 w-5" />
+                    Nouveau Stock
+                  </Button>
+                </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle className="font-display">
@@ -260,6 +335,7 @@ const StockAlimentPage = () => {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
 
           {/* Movement Dialog */}
           <Dialog open={movementDialog.isOpen} onOpenChange={(open) => setMovementDialog(prev => ({ ...prev, isOpen: open }))}>
@@ -422,7 +498,7 @@ const StockAlimentPage = () => {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleDelete(stock.id)}
+                            onClick={() => openDeleteDialog(stock.id)}
                             className="h-8 w-8 text-muted-foreground hover:text-destructive"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -436,6 +512,32 @@ const StockAlimentPage = () => {
             </table>
           </div>
         </div>
+        {/* Delete Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          onConfirm={handleDelete}
+          title="Supprimer ce stock ?"
+          description="Êtes-vous sûr de vouloir supprimer ce stock ? Cette action est irréversible."
+          isLoading={isDeleting}
+        />
+
+        {/* Constraint Error Dialog */}
+        <ConstraintErrorDialog
+          open={constraintErrorOpen}
+          onOpenChange={setConstraintErrorOpen}
+          itemType="stock d'aliment"
+        />
+
+        {/* Delete All Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteAllDialogOpen}
+          onOpenChange={setDeleteAllDialogOpen}
+          onConfirm={handleDeleteAll}
+          title="Supprimer tout le stock ?"
+          description="Êtes-vous sûr de vouloir supprimer tous les stocks d'aliments ? Cette action est irréversible."
+          isLoading={isDeletingAll}
+        />
       </div>
     </MainLayout>
   );

@@ -5,7 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
+import { ConstraintErrorDialog } from '@/components/ui/ConstraintErrorDialog';
+import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
+import { isConstraintError } from '@/lib/api';
 import { LotPostSevrage, Pesee, LotEngraissement, Mortalite } from '@/types';
 import { Plus, Scale, TrendingUp, Calendar, Target, Eye, Search, Edit2, Trash2, ArrowRight, CheckCircle, Skull } from 'lucide-react';
 import { toast } from 'sonner';
@@ -34,6 +38,7 @@ const statusColors: Record<LotPostSevrage['statut'], string> = {
 };
 
 const PostSevrage = () => {
+  const { refreshAlerts } = useAlertNotifications();
   const [lots, setLots] = useState<LotPostSevrage[]>([]);
   const [pesees, setPesees] = useState<Pesee[]>([]);
   const [isLotDialogOpen, setIsLotDialogOpen] = useState(false);
@@ -80,8 +85,31 @@ const PostSevrage = () => {
     notes: '',
   });
 
+  // Delete dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [constraintErrorOpen, setConstraintErrorOpen] = useState(false);
+
+  // Delete all dialog state
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
+
+  // Terminate dialog state
+  const [terminateDialogOpen, setTerminateDialogOpen] = useState(false);
+  const [terminatingLot, setTerminatingLot] = useState<LotPostSevrage | null>(null);
+  const [isTerminating, setIsTerminating] = useState(false);
+
   useEffect(() => {
     loadData();
+    
+    // Reload data when window gets focus (user returns to page from another tab/page)
+    const handleFocus = () => {
+      console.log('PostSevrage: Window focus, reloading data...');
+      loadData();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
   const loadData = async () => {
@@ -90,7 +118,7 @@ const PostSevrage = () => {
         api.getLotsPostSevrage(),
         api.getPesees()
       ]);
-      setLots(lotsData);
+      setLots(lotsData.sort((a, b) => new Date(b.dateCreation).getTime() - new Date(a.dateCreation).getTime()));
       setPesees(peseesData);
     } catch (error) {
       console.error(error);
@@ -178,9 +206,18 @@ const PostSevrage = () => {
         };
         await api.addPesee(initialPesee);
 
+        await api.addAlert({
+          id: '',
+          date: new Date().toISOString(),
+          message: `Nouveau lot post-sevrage créé: ${lotFormData.identification} (${nombreInitial} porcelets).`,
+          type: 'sante',
+          read: false
+        });
+
         toast.success('Lot créé avec succès');
       }
       loadData();
+      refreshAlerts();
       setIsLotDialogOpen(false);
       resetLotForm();
     } catch (error) {
@@ -203,46 +240,113 @@ const PostSevrage = () => {
     setIsLotDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer ce lot ?')) {
-      try {
-        await api.deleteLotPostSevrage(id);
-        loadData();
-        toast.success('Lot supprimé');
-      } catch (error) {
-        console.error(error);
+  const openDeleteDialog = (id: string) => {
+    setDeletingId(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deletingId) return;
+
+    setIsDeleting(true);
+    try {
+      await api.deleteLotPostSevrage(deletingId);
+      loadData();
+      toast.success('Lot supprimé');
+      setDeleteDialogOpen(false);
+    } catch (error) {
+      setDeleteDialogOpen(false);
+      if (isConstraintError(error)) {
+        setConstraintErrorOpen(true);
+      } else {
         toast.error('Erreur lors de la suppression');
       }
+      console.error(error);
+    } finally {
+      setIsDeleting(false);
+      setDeletingId(null);
     }
   };
 
-  const handleMarkTermine = async (lot: LotPostSevrage) => {
-    if (confirm(`Marquer le lot ${lot.identification} comme terminé (sans transfert) ?`)) {
-      try {
-        await api.updateLotPostSevrage(lot.id, { statut: 'termine' });
-        
-        // Create alert for termination
-        await api.addAlert({
-          id: '',
-          type: 'vente',
-          message: `Lot ${lot.identification} terminé: ${lot.nombreActuel} animaux`,
-          date: new Date().toISOString(),
-          read: false,
-          relatedId: lot.id,
-        });
-        
-        loadData();
-        toast.success('Lot marqué comme terminé');
-      } catch (error) {
-        console.error(error);
-        toast.error('Erreur lors de la mise à jour');
+  const handleDeleteAll = async () => {
+    setIsDeletingAll(true);
+    let hasConstraintError = false;
+    let deletedCount = 0;
+
+    try {
+      for (const lot of lots) {
+        try {
+          await api.deleteLotPostSevrage(lot.id);
+          deletedCount++;
+        } catch (error) {
+          if (isConstraintError(error)) {
+            hasConstraintError = true;
+          } else {
+            throw error;
+          }
+        }
       }
+
+      loadData();
+
+      if (hasConstraintError) {
+        if (deletedCount > 0) {
+          toast.warning(`${deletedCount} lots supprimés, mais certains n'ont pas pu l'être en raison de dépendances.`);
+        }
+        setDeleteAllDialogOpen(false);
+        setConstraintErrorOpen(true);
+      } else {
+        toast.success('Tous les lots ont été supprimés');
+        setDeleteAllDialogOpen(false);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+      setDeleteAllDialogOpen(false);
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
+
+  const openTerminateDialog = (lot: LotPostSevrage) => {
+    setTerminatingLot(lot);
+    setTerminateDialogOpen(true);
+  };
+
+  const handleMarkTermine = async () => {
+    if (!terminatingLot) return;
+
+    setIsTerminating(true);
+    try {
+      await api.updateLotPostSevrage(terminatingLot.id, { statut: 'termine' });
+      
+      // Create alert for termination
+      await api.addAlert({
+        id: '',
+        type: 'vente',
+        message: `Lot ${terminatingLot.identification} terminé: ${terminatingLot.nombreActuel} animaux`,
+        date: new Date().toISOString(),
+        read: false,
+        relatedId: terminatingLot.id,
+      });
+      
+      loadData();
+      refreshAlerts();
+      toast.success('Lot marqué comme terminé');
+      setTerminateDialogOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la mise à jour');
+      setTerminateDialogOpen(false);
+    } finally {
+      setIsTerminating(false);
+      setTerminatingLot(null);
     }
   };
 
   const filteredLots = lots.filter(lot =>
     lot.identification.toLowerCase().includes(search.toLowerCase())
-  );
+  ).sort((a, b) => new Date(b.dateCreation).getTime() - new Date(a.dateCreation).getTime());
 
   const handlePeseeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -265,20 +369,23 @@ const PostSevrage = () => {
         notes: peseeFormData.notes,
       };
 
-      await api.addPesee(newPesee);
+      const createdPesee = await api.addPesee(newPesee);
       toast.success('Pesée enregistrée');
-      loadData();
+      
+      // Update local state immediately
+      setPesees(prev => [...prev, { ...createdPesee, lotId: selectedLotId }]);
+      
       setIsPeseeDialogOpen(false);
       resetPeseeForm();
       setSelectedLotId(null);
 
-      // Update detail view if open
-      if (detailLot && detailLot.id === selectedLotId) {
-        setDetailLot(lot);
-      }
+      // Reload data to be sure
+      loadData();
+      refreshAlerts();
     } catch (error) {
       console.error(error);
-      toast.error('Erreur lors de l\'enregistrement de la pesée');
+      const message = error instanceof Error ? error.message : 'Erreur inconnue';
+      toast.error(`Erreur lors de l'enregistrement: ${message}`);
     }
   };
 
@@ -377,7 +484,44 @@ const PostSevrage = () => {
         toast.success('Lot marqué comme transféré');
       }
 
+      // Automate traceability movement
+      try {
+        const transferCount = parseInt(transferFormData.nombreTransferes);
+        const totalWeight = parseFloat(transferFormData.poidsTotal);
+        
+        // 1. Record Sortie from Post-Sevrage
+        await api.addMouvement({
+          id: '',
+          date: transferFormData.date,
+          typeMouvement: 'sortie',
+          typeAnimal: 'porcelet',
+          motif: 'transfert',
+          quantite: transferCount,
+          poids: totalWeight,
+          identification: transferLot.identification,
+          destination: 'Engraissement',
+          notes: 'Transfert automatique vers engraissement',
+        });
+
+        // 2. Record Entrée to Engraissement
+        await api.addMouvement({
+          id: '',
+          date: transferFormData.date,
+          typeMouvement: 'entree',
+          typeAnimal: 'porc_engraissement',
+          motif: 'transfert',
+          quantite: transferCount,
+          poids: totalWeight,
+          identification: `LOT-ENG-${transferLot.identification.replace('LOT-PS-', '')}`,
+          origine: 'Post-Sevrage',
+          notes: 'Transfert automatique depuis post-sevrage',
+        });
+      } catch (traceError) {
+        console.error('Erreur lors de l\'automatisation de la traçabilité:', traceError);
+      }
+
       loadData();
+      refreshAlerts();
       setIsTransferDialogOpen(false);
       setTransferLot(null);
     } catch (error) {
@@ -421,9 +565,21 @@ const PostSevrage = () => {
         lotPostSevrageId: mortaliteLot.id,
       });
 
+      await api.addMouvement({
+        id: '',
+        date: mortaliteFormData.date,
+        typeMouvement: 'sortie',
+        typeAnimal: 'porcelet',
+        motif: 'mortalite',
+        quantite: nombre,
+        identification: mortaliteLot.identification,
+        notes: `Mortalité automatique: ${mortaliteFormData.cause} - ${mortaliteFormData.notes}`,
+      });
+
       toast.success('Mortalité enregistrée');
       setIsMortaliteDialogOpen(false);
       loadData();
+      refreshAlerts();
     } catch (error) {
       console.error(error);
       toast.error('Erreur lors de l\'enregistrement');
@@ -431,11 +587,48 @@ const PostSevrage = () => {
   };
 
   const getPeseesForLot = (lotId: string) => {
-    return pesees.filter(p => p.lotId === lotId).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const lotPesees = pesees.filter(p => p.lotId === lotId);
+    if (lotPesees.length === 0) {
+      // Debug: Log when no pesées found for a lot
+      console.log(`Aucune pesée trouvée pour lot ${lotId}. Total pesées en mémoire: ${pesees.length}`);
+      if (pesees.length > 0) {
+        console.log('Exemple de pesée:', pesees[0]);
+      }
+    }
+    return lotPesees.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  };
+
+  const getAugmentedPesees = (lot: LotPostSevrage): Pesee[] => {
+    const realPesees = getPeseesForLot(lot.id);
+    
+    // Create virtual start pesée from lot data
+    const virtualPesee: Pesee = {
+      id: 'virtual-start',
+      lotId: lot.id,
+      date: lot.dateEntree,
+      poidsMoyen: lot.poidsEntree,
+      nombrePeses: lot.nombreInitial,
+      notes: 'Poids entrée (virtuel)'
+    };
+
+    if (realPesees.length === 0) return [virtualPesee];
+
+    // Check if the first real pesée matches the entry date (approx)
+    // or if it is strictly after the entry date
+    const firstPesee = realPesees[0];
+    const firstDate = new Date(firstPesee.date).toISOString().split('T')[0];
+    const entreeDate = new Date(lot.dateEntree).toISOString().split('T')[0];
+
+    if (firstDate > entreeDate) {
+      return [virtualPesee, ...realPesees];
+    }
+
+    return realPesees;
   };
 
   const calculateGMQ = (lot: LotPostSevrage): number | null => {
-    const lotPesees = getPeseesForLot(lot.id);
+    // Use augmented pesées to ensure we have a start point
+    const lotPesees = getAugmentedPesees(lot);
     if (lotPesees.length < 2) return null;
 
     const firstPesee = lotPesees[0];
@@ -447,8 +640,8 @@ const PostSevrage = () => {
     return Math.round(((lastPesee.poidsMoyen - firstPesee.poidsMoyen) / days) * 1000) / 1000;
   };
 
-  const calculateDaysToTarget = (lot: LotPostSevrage): number | null => {
-    const lotPesees = getPeseesForLot(lot.id);
+  const calculateDaysToTarget = (lot: LotPostSevrage, fallbackGmq?: number | null): number | null => {
+    const lotPesees = getAugmentedPesees(lot); // Use augmented here too
     if (lotPesees.length === 0) return null;
 
     const lastPesee = lotPesees[lotPesees.length - 1];
@@ -456,9 +649,14 @@ const PostSevrage = () => {
     // If current weight >= target, return 0 (target reached!)
     if (lastPesee.poidsMoyen >= lot.poidsCible) return 0;
     
-    const gmq = calculateGMQ(lot);
+    let gmq = calculateGMQ(lot);
+    
+    // Fix: If no specific GMQ (e.g. only 1 pesée), use fallback (farm average)
+    if ((!gmq || gmq <= 0) && fallbackGmq) {
+      gmq = fallbackGmq;
+    }
 
-    // If no GMQ available, we can't estimate days but we know target not reached
+    // If still no GMQ available, we can't estimate days
     if (!gmq || gmq <= 0) return null;
 
     const remainingWeight = lot.poidsCible - lastPesee.poidsMoyen;
@@ -474,11 +672,11 @@ const PostSevrage = () => {
   const lotsEnCours = lots.filter(l => l.statut === 'en_cours');
   const totalAnimaux = lotsEnCours.reduce((sum, l) => sum + l.nombreActuel, 0);
 
-  // Calculate average GMQ
-  const gmqValues = lotsEnCours.map(l => calculateGMQ(l)).filter((g): g is number => g !== null);
+  // Calculate average GMQ for stat cards and fallback
+  const gmqValues = lotsEnCours.map(l => calculateGMQ(l)).filter((g): g is number => g !== null && g > 0);
   const avgGMQ = gmqValues.length > 0
     ? Math.round((gmqValues.reduce((a, b) => a + b, 0) / gmqValues.length) * 1000) / 1000
-    : null;
+    : 0.45; // Default fallback if no data at all (0.45 kg/day standard)
 
   return (
     <MainLayout>
@@ -489,16 +687,23 @@ const PostSevrage = () => {
             <h1 className="font-display text-3xl font-bold text-foreground">Post-Sevrage</h1>
             <p className="text-muted-foreground mt-1">Gérez vos lots de porcelets sevrés</p>
           </div>
-          <Dialog open={isLotDialogOpen} onOpenChange={(open) => {
-            setIsLotDialogOpen(open);
-            if (!open) resetLotForm();
-          }}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="h-5 w-5" />
-                Nouveau lot
-              </Button>
-            </DialogTrigger>
+            <div className="flex flex-wrap gap-2">
+              {lots.length > 0 && (
+                <Button variant="destructive" onClick={() => setDeleteAllDialogOpen(true)} className="gap-2">
+                  <Trash2 className="h-4 w-4" />
+                  Tout effacer
+                </Button>
+              )}
+              <Dialog open={isLotDialogOpen} onOpenChange={(open) => {
+                setIsLotDialogOpen(open);
+                if (!open) resetLotForm();
+              }}>
+                <DialogTrigger asChild>
+                  <Button className="gap-2">
+                    <Plus className="h-5 w-5" />
+                    Nouveau lot
+                  </Button>
+                </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle className="font-display">
@@ -594,6 +799,7 @@ const PostSevrage = () => {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Stats */}
@@ -857,16 +1063,69 @@ const PostSevrage = () => {
                       <p className="text-xs text-muted-foreground">GMQ (kg/j)</p>
                     </div>
                     <div className="p-3 rounded-xl bg-accent/10 text-center">
-                      <p className="text-2xl font-bold text-accent">{calculateDaysToTarget(detailLot) ?? '-'}</p>
-                      <p className="text-xs text-muted-foreground">Jours restants</p>
+                      <p className="text-2xl font-bold text-accent">{calculateDaysToTarget(detailLot, avgGMQ) ?? '-'}</p>
+                      <p className="text-xs text-muted-foreground">Jours restants (est.)</p>
                     </div>
                   </div>
+
+                  {/* Progress bar */}
+                  {(() => {
+                    const lastWeight = getLastWeight(detailLot.id);
+                    const currentWeight = lastWeight || detailLot.poidsEntree;
+                    const progress = Math.min(100, Math.round((currentWeight / detailLot.poidsCible) * 100));
+                    const daysToTarget = calculateDaysToTarget(detailLot, avgGMQ);
+                    const estimatedEndDate = daysToTarget && daysToTarget > 0 
+                      ? format(new Date(Date.now() + daysToTarget * 24 * 60 * 60 * 1000), 'd MMM yyyy', { locale: fr })
+                      : null;
+
+                    return (
+                      <div className="space-y-3">
+                        <div>
+                          <div className="flex justify-between text-sm mb-2">
+                            <span className="text-muted-foreground">Progression vers {detailLot.poidsCible} kg</span>
+                            <span className="font-medium text-foreground">{progress}%</span>
+                          </div>
+                          <div className="h-3 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className={cn(
+                                "h-full rounded-full transition-all duration-500",
+                                progress >= 100 ? "bg-success" : "bg-primary"
+                              )}
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                          <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                            <span>{detailLot.poidsEntree} kg (entrée)</span>
+                            <span>{currentWeight} kg (actuel)</span>
+                            <span>{detailLot.poidsCible} kg (cible)</span>
+                          </div>
+                        </div>
+
+                        {estimatedEndDate && (
+                          <div className="flex items-center gap-2 p-3 rounded-xl bg-info/10 text-info">
+                            <Calendar className="h-4 w-4" />
+                            <span className="text-sm font-medium">
+                              Fin estimée: {estimatedEndDate}
+                              {!calculateGMQ(detailLot) && <span className="text-xs opacity-70 ml-1">(basée sur moy. élevage)</span>}
+                            </span>
+                          </div>
+                        )}
+
+                        {progress >= 100 && (
+                          <div className="flex items-center gap-2 p-3 rounded-xl bg-success/10 text-success">
+                            <Target className="h-4 w-4" />
+                            <span className="text-sm font-medium">Poids cible atteint !</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Chart */}
                   <div className="h-64">
                     <h4 className="font-semibold text-foreground mb-3">Évolution du poids</h4>
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={getPeseesForLot(detailLot.id).map(p => ({
+                      <LineChart data={getAugmentedPesees(detailLot).map(p => ({
                         date: format(new Date(p.date), 'd MMM', { locale: fr }),
                         poids: p.poidsMoyen,
                       }))}>
@@ -902,10 +1161,11 @@ const PostSevrage = () => {
                   <div>
                     <h4 className="font-semibold text-foreground mb-3">Historique des pesées</h4>
                     <div className="space-y-2">
-                      {getPeseesForLot(detailLot.id).reverse().map((pesee) => (
+                      {getAugmentedPesees(detailLot).reverse().map((pesee) => (
                         <div key={pesee.id} className="flex justify-between items-center p-3 rounded-lg bg-muted/30">
                           <span className="text-muted-foreground">
                             {format(new Date(pesee.date), 'd MMM yyyy', { locale: fr })}
+                            {pesee.id === 'virtual-start' && <span className="ml-2 text-xs opacity-70">(Initiale)</span>}
                           </span>
                           <span className="font-semibold text-foreground">{pesee.poidsMoyen} kg</span>
                         </div>
@@ -939,9 +1199,11 @@ const PostSevrage = () => {
           ) : (
             filteredLots.map((lot, index) => {
               const gmq = calculateGMQ(lot);
-              const daysToTarget = calculateDaysToTarget(lot);
+              const daysToTarget = calculateDaysToTarget(lot, avgGMQ);
               const lastWeight = getLastWeight(lot.id);
-              const progress = lastWeight ? Math.min(100, Math.round((lastWeight / lot.poidsCible) * 100)) : 0;
+              const currentWeight = lastWeight || lot.poidsEntree; // Fallback to entrance weight
+              const progress = Math.min(100, Math.round((currentWeight / lot.poidsCible) * 100));
+              const targetReached = currentWeight >= lot.poidsCible;
 
               return (
                 <div
@@ -979,7 +1241,7 @@ const PostSevrage = () => {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleDelete(lot.id)}
+                        onClick={() => openDeleteDialog(lot.id)}
                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -993,7 +1255,7 @@ const PostSevrage = () => {
                   <div className="mb-4">
                     <div className="flex justify-between text-sm mb-1">
                       <span className="text-muted-foreground">Progression</span>
-                      <span className="font-medium text-foreground">{lastWeight || lot.poidsEntree} / {lot.poidsCible} kg</span>
+                      <span className="font-medium text-foreground">{currentWeight} / {lot.poidsCible} kg</span>
                     </div>
                     <div className="h-2 rounded-full bg-muted overflow-hidden">
                       <div
@@ -1013,8 +1275,10 @@ const PostSevrage = () => {
                       </p>
                     </div>
                     <div className="p-3 rounded-xl bg-success/10 text-center">
-                      <p className="text-lg font-bold text-success">{gmq || '-'}</p>
-                      <p className="text-xs text-muted-foreground">GMQ (kg/j)</p>
+                      <p className="text-lg font-bold text-success">
+                        {gmq ? gmq : (avgGMQ && lot.statut === 'en_cours' ? `~${avgGMQ}` : '-')}
+                      </p>
+                      <p className="text-xs text-muted-foreground">GMQ (kg/j){!gmq && avgGMQ && lot.statut === 'en_cours' ? ' (est.)' : ''}</p>
                     </div>
                   </div>
 
@@ -1046,7 +1310,7 @@ const PostSevrage = () => {
                       <Eye className="h-4 w-4" />
                       Détails
                     </Button>
-                    {lot.statut === 'en_cours' && (
+                    {lot.statut === 'en_cours' && !targetReached && (
                       <Button
                         size="sm"
                         className="flex-1 gap-1"
@@ -1084,7 +1348,7 @@ const PostSevrage = () => {
                         variant="success"
                         size="sm"
                         className="flex-1 gap-1"
-                        onClick={() => handleMarkTermine(lot)}
+                        onClick={() => openTerminateDialog(lot)}
                       >
                         <CheckCircle className="h-4 w-4" />
                         Terminer
@@ -1096,6 +1360,43 @@ const PostSevrage = () => {
             })
           )}
         </div>
+
+        {/* Delete Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          onConfirm={handleDelete}
+          title="Supprimer ce lot ?"
+          description="Êtes-vous sûr de vouloir supprimer ce lot post-sevrage ? Cette action est irréversible."
+          isLoading={isDeleting}
+        />
+
+        {/* Terminate Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={terminateDialogOpen}
+          onOpenChange={setTerminateDialogOpen}
+          onConfirm={handleMarkTermine}
+          title="Terminer le lot ?"
+          description={`Êtes-vous sûr de vouloir marquer le lot ${terminatingLot?.identification} comme terminé ?`}
+          isLoading={isTerminating}
+        />
+
+        {/* Constraint Error Dialog */}
+        <ConstraintErrorDialog
+          open={constraintErrorOpen}
+          onOpenChange={setConstraintErrorOpen}
+          itemType="lot"
+        />
+
+        {/* Delete All Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteAllDialogOpen}
+          onOpenChange={setDeleteAllDialogOpen}
+          onConfirm={handleDeleteAll}
+          title="Supprimer tous les lots ?"
+          description="Êtes-vous sûr de vouloir supprimer tous les lots de post-sevrage ? Cette action est irréversible."
+          isLoading={isDeletingAll}
+        />
       </div>
     </MainLayout>
   );

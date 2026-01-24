@@ -5,7 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
+import { ConstraintErrorDialog } from '@/components/ui/ConstraintErrorDialog';
+import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
+import { isConstraintError } from '@/lib/api';
 import { LotEngraissement, Pesee, Mortalite } from '@/types';
 import { Plus, Scale, TrendingUp, Calendar, Target, Eye, Search, Edit2, Trash2, CheckCircle, Skull } from 'lucide-react';
 import { toast } from 'sonner';
@@ -31,6 +35,7 @@ const statusColors: Record<LotEngraissement['statut'], string> = {
 };
 
 const Engraissement = () => {
+  const { refreshAlerts } = useAlertNotifications();
   const [lots, setLots] = useState<LotEngraissement[]>([]);
   const [pesees, setPesees] = useState<Pesee[]>([]);
   const [isLotDialogOpen, setIsLotDialogOpen] = useState(false);
@@ -67,8 +72,30 @@ const Engraissement = () => {
     notes: '',
   });
 
+  // Delete dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [constraintErrorOpen, setConstraintErrorOpen] = useState(false);
+
+  // Delete all dialog state
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
+
+  // Terminate dialog state
+  const [terminateDialogOpen, setTerminateDialogOpen] = useState(false);
+  const [terminatingLot, setTerminatingLot] = useState<LotEngraissement | null>(null);
+  const [isTerminating, setIsTerminating] = useState(false);
+
   useEffect(() => {
     loadData();
+    
+    const handleFocus = () => {
+      console.log('Engraissement: Window focus, reloading data...');
+      loadData();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
   const loadData = async () => {
@@ -77,7 +104,7 @@ const Engraissement = () => {
         api.getLotsEngraissement(),
         api.getPesees()
       ]);
-      setLots(lotsData);
+      setLots(lotsData.sort((a, b) => new Date(b.dateCreation).getTime() - new Date(a.dateCreation).getTime()));
       setPesees(peseesData);
     } catch (error) {
       console.error(error);
@@ -154,21 +181,36 @@ const Engraissement = () => {
 
         const createdLot = await api.addLotEngraissement(newLot);
 
-        // Add initial weighing
-        const initialPesee: Pesee = {
+        // Add initial weighing - with error handling
+        try {
+          const initialPesee: Pesee = {
+            id: '',
+            lotId: createdLot.id,
+            date: lotFormData.dateEntree,
+            poidsMoyen: poidsEntree,
+            nombrePeses: nombreInitial,
+            notes: 'Pesée d\'entrée',
+          };
+          const createdPesee = await api.addPesee(initialPesee);
+          console.log('Pesée initiale créée:', createdPesee.id);
+        } catch (peseeError) {
+          console.error('Erreur création pesée initiale:', peseeError);
+          toast.warning('Lot créé mais erreur lors de la pesée initiale');
+        }
+
+        await api.addAlert({
           id: '',
-          lotId: createdLot.id,
-          date: lotFormData.dateEntree,
-          poidsMoyen: poidsEntree,
-          nombrePeses: nombreInitial,
-          notes: 'Pesée d\'entrée',
-        };
-        await api.addPesee(initialPesee);
+          date: new Date().toISOString(),
+          message: `Nouveau lot d'engraissement créé: ${lotFormData.identification} (${nombreInitial} porcs).`,
+          type: 'engraissement_pret',
+          read: false
+        });
 
         toast.success('Lot créé avec succès');
       }
 
       loadData();
+      refreshAlerts();
       setIsLotDialogOpen(false);
       resetLotForm();
     } catch (error) {
@@ -191,40 +233,107 @@ const Engraissement = () => {
     setIsLotDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer ce lot ?')) {
-      try {
-        await api.deleteLotEngraissement(id);
-        loadData();
-        toast.success('Lot supprimé');
-      } catch (error) {
-        console.error(error);
+  const openDeleteDialog = (id: string) => {
+    setDeletingId(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deletingId) return;
+
+    setIsDeleting(true);
+    try {
+      await api.deleteLotEngraissement(deletingId);
+      loadData();
+      toast.success('Lot supprimé');
+      setDeleteDialogOpen(false);
+    } catch (error) {
+      setDeleteDialogOpen(false);
+      if (isConstraintError(error)) {
+        setConstraintErrorOpen(true);
+      } else {
         toast.error('Erreur lors de la suppression');
       }
+      console.error(error);
+    } finally {
+      setIsDeleting(false);
+      setDeletingId(null);
     }
   };
 
-  const handleMarkTermine = async (lot: LotEngraissement) => {
-    if (confirm(`Confirmer que le lot ${lot.identification} est terminé ?`)) {
-      try {
-        await api.updateLotEngraissement(lot.id, { statut: 'termine' });
-        
-        // Create alert for termination
-        await api.addAlert({
-          id: '',
-          type: 'vente',
-          message: `Lot d'engraissement ${lot.identification} terminé: ${lot.nombreActuel} porcs`,
-          date: new Date().toISOString(),
-          read: false,
-          relatedId: lot.id,
-        });
-        
-        loadData();
-        toast.success('Lot marqué comme terminé');
-      } catch (error) {
-        console.error(error);
-        toast.error('Erreur lors de la mise à jour');
+  const handleDeleteAll = async () => {
+    setIsDeletingAll(true);
+    let hasConstraintError = false;
+    let deletedCount = 0;
+
+    try {
+      for (const lot of lots) {
+        try {
+          await api.deleteLotEngraissement(lot.id);
+          deletedCount++;
+        } catch (error) {
+          if (isConstraintError(error)) {
+            hasConstraintError = true;
+          } else {
+            throw error;
+          }
+        }
       }
+
+      loadData();
+
+      if (hasConstraintError) {
+        if (deletedCount > 0) {
+          toast.warning(`${deletedCount} lots supprimés, mais certains n'ont pas pu l'être en raison de dépendances.`);
+        }
+        setDeleteAllDialogOpen(false);
+        setConstraintErrorOpen(true);
+      } else {
+        toast.success("Tous les lots d'engraissement ont été supprimés");
+        setDeleteAllDialogOpen(false);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+      setDeleteAllDialogOpen(false);
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
+
+  const openTerminateDialog = (lot: LotEngraissement) => {
+    setTerminatingLot(lot);
+    setTerminateDialogOpen(true);
+  };
+
+  const handleMarkTermine = async () => {
+    if (!terminatingLot) return;
+
+    setIsTerminating(true);
+    try {
+      await api.updateLotEngraissement(terminatingLot.id, { statut: 'termine' });
+      
+      // Create alert for termination
+      await api.addAlert({
+        id: '',
+        type: 'vente',
+        message: `Lot d'engraissement ${terminatingLot.identification} terminé: ${terminatingLot.nombreActuel} porcs`,
+        date: new Date().toISOString(),
+        read: false,
+        relatedId: terminatingLot.id,
+      });
+      
+      loadData();
+      refreshAlerts();
+      toast.success('Lot marqué comme terminé');
+      setTerminateDialogOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la mise à jour');
+      setTerminateDialogOpen(false);
+    } finally {
+      setIsTerminating(false);
+      setTerminatingLot(null);
     }
   };
 
@@ -263,9 +372,21 @@ const Engraissement = () => {
         lotEngraissementId: mortaliteLot.id,
       });
 
+      await api.addMouvement({
+        id: '',
+        date: mortaliteFormData.date,
+        typeMouvement: 'sortie',
+        typeAnimal: 'porc_engraissement',
+        motif: 'mortalite',
+        quantite: nombre,
+        identification: mortaliteLot.identification,
+        notes: `Mortalité automatique: ${mortaliteFormData.cause} - ${mortaliteFormData.notes}`,
+      });
+
       toast.success('Mortalité enregistrée');
       setIsMortaliteDialogOpen(false);
       loadData();
+      refreshAlerts();
     } catch (error) {
       console.error(error);
       toast.error('Erreur lors de l\'enregistrement');
@@ -274,7 +395,7 @@ const Engraissement = () => {
 
   const filteredLots = lots.filter(lot =>
     lot.identification.toLowerCase().includes(search.toLowerCase())
-  );
+  ).sort((a, b) => new Date(b.dateCreation).getTime() - new Date(a.dateCreation).getTime());
 
   const handlePeseeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -300,6 +421,7 @@ const Engraissement = () => {
       await api.addPesee(newPesee);
       toast.success('Pesée enregistrée');
       loadData();
+      refreshAlerts();
       setIsPeseeDialogOpen(false);
       resetPeseeForm();
       setSelectedLotId(null);
@@ -327,8 +449,36 @@ const Engraissement = () => {
     return pesees.filter(p => p.lotId === lotId).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   };
 
+  const getAugmentedPesees = (lot: LotEngraissement): Pesee[] => {
+    const realPesees = getPeseesForLot(lot.id);
+    
+    // Create virtual start pesée from lot data
+    const virtualPesee: Pesee = {
+      id: 'virtual-start',
+      lotId: lot.id,
+      date: lot.dateEntree,
+      poidsMoyen: lot.poidsEntree,
+      nombrePeses: lot.nombreInitial,
+      notes: 'Poids entrée (virtuel)'
+    };
+
+    if (realPesees.length === 0) return [virtualPesee];
+
+    // Check if the first real pesée matches the entry date (approx)
+    // or if it is strictly after the entry date
+    const firstPesee = realPesees[0];
+    const firstDate = new Date(firstPesee.date).toISOString().split('T')[0];
+    const entreeDate = new Date(lot.dateEntree).toISOString().split('T')[0];
+
+    if (firstDate > entreeDate) {
+      return [virtualPesee, ...realPesees];
+    }
+
+    return realPesees;
+  };
+
   const calculateGMQ = (lot: LotEngraissement): number | null => {
-    const lotPesees = getPeseesForLot(lot.id);
+    const lotPesees = getAugmentedPesees(lot);
     if (lotPesees.length < 2) return null;
 
     const firstPesee = lotPesees[0];
@@ -340,8 +490,8 @@ const Engraissement = () => {
     return Math.round(((lastPesee.poidsMoyen - firstPesee.poidsMoyen) / days) * 1000) / 1000;
   };
 
-  const calculateDaysToTarget = (lot: LotEngraissement): number | null => {
-    const lotPesees = getPeseesForLot(lot.id);
+  const calculateDaysToTarget = (lot: LotEngraissement, fallbackGmq?: number | null): number | null => {
+    const lotPesees = getAugmentedPesees(lot);
     if (lotPesees.length === 0) return null;
 
     const lastPesee = lotPesees[lotPesees.length - 1];
@@ -349,9 +499,14 @@ const Engraissement = () => {
     // If current weight >= target, return 0 (target reached!)
     if (lastPesee.poidsMoyen >= lot.poidsCible) return 0;
     
-    const gmq = calculateGMQ(lot);
+    let gmq = calculateGMQ(lot);
+    
+    // Fix: If no specific GMQ (e.g. only 1 pesée), use fallback (farm average)
+    if ((!gmq || gmq <= 0) && fallbackGmq) {
+      gmq = fallbackGmq;
+    }
 
-    // If no GMQ available, we can't estimate days but we know target not reached
+    // If still no GMQ available, we can't estimate days
     if (!gmq || gmq <= 0) return null;
 
     const remainingWeight = lot.poidsCible - lastPesee.poidsMoyen;
@@ -367,11 +522,11 @@ const Engraissement = () => {
   const lotsEnCours = lots.filter(l => l.statut === 'en_cours');
   const totalAnimaux = lotsEnCours.reduce((sum, l) => sum + l.nombreActuel, 0);
 
-  // Calculate average GMQ
-  const gmqValues = lotsEnCours.map(l => calculateGMQ(l)).filter((g): g is number => g !== null);
+  // Calculate average GMQ for stat cards and fallback
+  const gmqValues = lotsEnCours.map(l => calculateGMQ(l)).filter((g): g is number => g !== null && g > 0);
   const avgGMQ = gmqValues.length > 0
     ? Math.round((gmqValues.reduce((a, b) => a + b, 0) / gmqValues.length) * 1000) / 1000
-    : null;
+    : 0.80; // Default fallback for Engraissement (higher than PS)
 
   return (
     <MainLayout>
@@ -382,16 +537,23 @@ const Engraissement = () => {
             <h1 className="font-display text-3xl font-bold text-foreground">Engraissement</h1>
             <p className="text-muted-foreground mt-1">Suivez vos lots de porcs en engraissement</p>
           </div>
-          <Dialog open={isLotDialogOpen} onOpenChange={(open) => {
-            setIsLotDialogOpen(open);
-            if (!open) resetLotForm();
-          }}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="h-5 w-5" />
-                Nouveau lot
-              </Button>
-            </DialogTrigger>
+            <div className="flex flex-wrap gap-2">
+              {lots.length > 0 && (
+                <Button variant="destructive" onClick={() => setDeleteAllDialogOpen(true)} className="gap-2">
+                  <Trash2 className="h-4 w-4" />
+                  Tout effacer
+                </Button>
+              )}
+              <Dialog open={isLotDialogOpen} onOpenChange={(open) => {
+                setIsLotDialogOpen(open);
+                if (!open) resetLotForm();
+              }}>
+                <DialogTrigger asChild>
+                  <Button className="gap-2">
+                    <Plus className="h-5 w-5" />
+                    Nouveau lot
+                  </Button>
+                </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle className="font-display">
@@ -487,6 +649,7 @@ const Engraissement = () => {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Stats */}
@@ -685,8 +848,8 @@ const Engraissement = () => {
                       <p className="text-xs text-muted-foreground">GMQ (kg/j)</p>
                     </div>
                     <div className="p-3 rounded-xl bg-accent/10 text-center">
-                      <p className="text-2xl font-bold text-accent">{calculateDaysToTarget(detailLot) ?? '-'}</p>
-                      <p className="text-xs text-muted-foreground">Jours restants</p>
+                      <p className="text-2xl font-bold text-accent">{calculateDaysToTarget(detailLot, avgGMQ) ?? '-'}</p>
+                      <p className="text-xs text-muted-foreground">Jours restants (est.)</p>
                     </div>
                   </div>
 
@@ -694,7 +857,7 @@ const Engraissement = () => {
                   <div className="h-64">
                     <h4 className="font-semibold text-foreground mb-3">Évolution du poids</h4>
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={getPeseesForLot(detailLot.id).map(p => ({
+                      <LineChart data={getAugmentedPesees(detailLot).map(p => ({
                         date: format(new Date(p.date), 'd MMM', { locale: fr }),
                         poids: p.poidsMoyen,
                       }))}>
@@ -730,10 +893,11 @@ const Engraissement = () => {
                   <div>
                     <h4 className="font-semibold text-foreground mb-3">Historique des pesées</h4>
                     <div className="space-y-2">
-                      {getPeseesForLot(detailLot.id).reverse().map((pesee) => (
+                      {getAugmentedPesees(detailLot).reverse().map((pesee) => (
                         <div key={pesee.id} className="flex justify-between items-center p-3 rounded-lg bg-muted/30">
                           <span className="text-muted-foreground">
                             {format(new Date(pesee.date), 'd MMM yyyy', { locale: fr })}
+                            {pesee.id === 'virtual-start' && <span className="ml-2 text-xs opacity-70">(Initiale)</span>}
                           </span>
                           <span className="font-semibold text-foreground">{pesee.poidsMoyen} kg</span>
                         </div>
@@ -767,9 +931,10 @@ const Engraissement = () => {
           ) : (
             filteredLots.map((lot, index) => {
               const gmq = calculateGMQ(lot);
-              const daysToTarget = calculateDaysToTarget(lot);
+              const daysToTarget = calculateDaysToTarget(lot, avgGMQ);
               const lastWeight = getLastWeight(lot.id);
-              const progress = lastWeight ? Math.min(100, Math.round((lastWeight / lot.poidsCible) * 100)) : 0;
+              const currentWeight = lastWeight || lot.poidsEntree;
+              const progress = Math.min(100, Math.round((currentWeight / lot.poidsCible) * 100));
 
               return (
                 <div
@@ -807,7 +972,7 @@ const Engraissement = () => {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleDelete(lot.id)}
+                        onClick={() => openDeleteDialog(lot.id)}
                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -821,7 +986,7 @@ const Engraissement = () => {
                   <div className="mb-4">
                     <div className="flex justify-between text-sm mb-1">
                       <span className="text-muted-foreground">Progression</span>
-                      <span className="font-medium text-foreground">{lastWeight || lot.poidsEntree} / {lot.poidsCible} kg</span>
+                      <span className="font-medium text-foreground">{currentWeight} / {lot.poidsCible} kg</span>
                     </div>
                     <div className="h-2 rounded-full bg-muted overflow-hidden">
                       <div
@@ -841,8 +1006,10 @@ const Engraissement = () => {
                       </p>
                     </div>
                     <div className="p-3 rounded-xl bg-success/10 text-center">
-                      <p className="text-lg font-bold text-success">{gmq || '-'}</p>
-                      <p className="text-xs text-muted-foreground">GMQ (kg/j)</p>
+                      <p className="text-lg font-bold text-success">
+                        {gmq ? gmq : (avgGMQ && lot.statut === 'en_cours' ? `~${avgGMQ}` : '-')}
+                      </p>
+                      <p className="text-xs text-muted-foreground">GMQ (kg/j){!gmq && avgGMQ && lot.statut === 'en_cours' ? ' (est.)' : ''}</p>
                     </div>
                   </div>
 
@@ -859,6 +1026,23 @@ const Engraissement = () => {
                     <div className="flex items-center gap-2 text-success mb-4 p-3 rounded-xl bg-success/10">
                       <Target className="h-4 w-4" />
                       <span className="text-sm font-medium">Poids cible atteint !</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex-1 gap-1 text-success hover:text-success"
+                        onClick={() => openTerminateDialog(lot)}
+                      >
+                        <CheckCircle className="h-4 w-4" />
+                        Terminer
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive hover:text-destructive ml-auto"
+                        onClick={() => openDeleteDialog(lot.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   )}
 
@@ -903,7 +1087,7 @@ const Engraissement = () => {
                       variant="success"
                       size="sm"
                       className="w-full mt-2 gap-1"
-                      onClick={() => handleMarkTermine(lot)}
+                      onClick={() => openTerminateDialog(lot)}
                     >
                       <CheckCircle className="h-4 w-4" />
                       Confirmer Terminé
@@ -917,6 +1101,32 @@ const Engraissement = () => {
           )}
         </div>
       </div>
+        {/* Delete Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          onConfirm={handleDelete}
+          title="Supprimer ce lot ?"
+          description="Êtes-vous sûr de vouloir supprimer ce lot ? Cette action est irréversible."
+          isLoading={isDeleting}
+        />
+
+        {/* Delete All Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteAllDialogOpen}
+          onOpenChange={setDeleteAllDialogOpen}
+          onConfirm={handleDeleteAll}
+          title="Supprimer tous les lots ?"
+          description="Êtes-vous sûr de vouloir supprimer tous les lots d'engraissement ? Cette action est irréversible."
+          isLoading={isDeletingAll}
+        />
+
+        {/* Constraint Error Dialog */}
+        <ConstraintErrorDialog
+          open={constraintErrorOpen}
+          onOpenChange={setConstraintErrorOpen}
+          itemType="lot"
+        />
     </MainLayout>
   );
 };

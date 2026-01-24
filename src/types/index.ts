@@ -7,6 +7,7 @@ export interface User {
 export interface Truie {
   id: string;
   identification: string;
+  race: 'large_white' | 'landrace' | 'pietrain' | 'duroc' | 'autre';
   dateEntree: string;
   dateNaissance: string;
   poids: number;
@@ -14,16 +15,26 @@ export interface Truie {
   notes: string;
 }
 
-
+export interface Verrat {
+  id: string;
+  identification: string;
+  race: 'large_white' | 'landrace' | 'pietrain' | 'duroc' | 'autre';
+  dateNaissance: string;
+  dateEntree: string;
+  poids: number;
+  statut: 'actif' | 'reforme' | 'vendu';
+  notes: string;
+}
 
 export interface Saillie {
   id: string;
   truieId: string;
+  verratId?: string; // Optionnel - pour lier la saillie au verrat
   date: string;
   methode: 'naturelle' | 'insemination';
   employe: string;
   datePrevueMiseBas: string;
-  dateRetourChaleur: string; // Date prévue pour contrôle retour en chaleur (J+21)
+  dateRetourChaleur: string;
   statut: 'en_cours' | 'confirmee' | 'echouee';
 }
 
@@ -51,7 +62,7 @@ export interface Portee {
 export interface Vente {
   id: string;
   date: string;
-  typeAnimal: 'porcelet' | 'porc_engraissement' | 'truie_reforme';
+  typeAnimal: 'porcelet' | 'porc_engraissement' | 'truie_reforme' | 'verrat_reforme';
   quantite: number;
   poidsTotal: number;
   prixUnitaire: number;
@@ -122,8 +133,8 @@ export interface StockAliment {
   id: string;
   nom: string;
   type: string;
-  quantite: number; // Nombre de sacs
-  poidsSac: 25 | 40 | number; // 25kg ou 40kg, allow number for flexibility but UI will enforce
+  quantite: number;
+  poidsSac: 25 | 40 | number;
   dateMiseAJour: string;
 }
 
@@ -152,9 +163,10 @@ export interface Vaccination {
   date: string;
   nom: string;
   type: 'obligatoire' | 'preventif' | 'curatif';
-  lotType: 'post-sevrage' | 'engraissement' | 'truie';
+  lotType: 'post-sevrage' | 'engraissement' | 'truie' | 'verrat';
   lotId?: string;
   truieId?: string;
+  verratId?: string;
   dateRappel?: string;
   notes: string;
 }
@@ -165,9 +177,25 @@ export interface Traitement {
   nom: string;
   medicament: string;
   dureeJours: number;
-  lotType: 'post-sevrage' | 'engraissement' | 'truie';
+  lotType: 'post-sevrage' | 'engraissement' | 'truie' | 'verrat';
   lotId?: string;
   truieId?: string;
+  verratId?: string;
   notes: string;
 }
 
+// Traçabilité
+export interface Mouvement {
+  id: string;
+  date: string;
+  typeMouvement: 'entree' | 'sortie';
+  typeAnimal: 'truie' | 'verrat' | 'porcelet' | 'porc_engraissement';
+  motif: 'naissance' | 'achat' | 'vente' | 'mortalite' | 'reforme' | 'transfert';
+  quantite: number;
+  identification?: string;
+  origine?: string;
+  destination?: string;
+  poids?: number;
+  notes: string;
+  createdAt?: string;
+}

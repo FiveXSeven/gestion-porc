@@ -5,8 +5,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
+import { ConstraintErrorDialog } from '@/components/ui/ConstraintErrorDialog';
+import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
-import { Portee, MiseBas, Truie, Saillie, LotPostSevrage, Pesee } from '@/types';
+import { isConstraintError } from '@/lib/api';
+import { Portee, MiseBas, Truie, Saillie, Verrat, LotPostSevrage, Pesee } from '@/types';
+
+const raceLabels: Record<string, string> = {
+  large_white: 'Large White',
+  landrace: 'Landrace',
+  pietrain: 'Piétrain',
+  duroc: 'Duroc',
+  autre: 'Autre',
+};
 import { Plus, PiggyBank, Scale, Search, Edit2, Trash2, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -27,10 +39,12 @@ const statusColors: Record<Portee['statut'], string> = {
 };
 
 const Portees = () => {
+  const { refreshAlerts } = useAlertNotifications();
   const [portees, setPortees] = useState<Portee[]>([]);
   const [misesBas, setMisesBas] = useState<MiseBas[]>([]);
   const [truies, setTruies] = useState<Truie[]>([]);
   const [saillies, setSaillies] = useState<Saillie[]>([]);
+  const [verrats, setVerrats] = useState<Verrat[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
     saillieId: '',
@@ -52,6 +66,16 @@ const Portees = () => {
     nombreSevles: '',
     createLot: true,
   });
+  
+  // Delete dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [constraintErrorOpen, setConstraintErrorOpen] = useState(false);
+  
+  // Delete all dialog state
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -59,16 +83,26 @@ const Portees = () => {
 
   const loadData = async () => {
     try {
-      const [porteesData, misesBasData, truiesData, sailliesData] = await Promise.all([
+      const [porteesData, misesBasData, truiesData, sailliesData, verratsData] = await Promise.all([
         api.getPortees(),
         api.getMisesBas(),
         api.getTruies(),
-        api.getSaillies()
+        api.getSaillies(),
+        api.getVerrats()
       ]);
-      setPortees(porteesData);
+      // Sort portees based on miseBas date (descending)
+      const sortedPortees = porteesData.sort((a, b) => {
+        const mbA = misesBasData.find(m => m.id === a.miseBasId);
+        const mbB = misesBasData.find(m => m.id === b.miseBasId);
+        const dateA = mbA ? new Date(mbA.date).getTime() : 0;
+        const dateB = mbB ? new Date(mbB.date).getTime() : 0;
+        return dateB - dateA;
+      });
+      setPortees(sortedPortees);
       setMisesBas(misesBasData);
       setTruies(truiesData);
       setSaillies(sailliesData);
+      setVerrats(verratsData);
     } catch (error) {
       console.error(error);
       toast.error('Erreur lors du chargement des données');
@@ -149,9 +183,19 @@ const Portees = () => {
         await api.updateTruie(saillie.truieId, { statut: 'allaitante' });
         await api.updateSaillie(formData.saillieId, { statut: 'confirmee' });
 
+        const truie = truies.find(t => t.id === saillie.truieId);
+        await api.addAlert({
+          id: '',
+          date: new Date().toISOString(),
+          message: `Nouvelle mise bas enregistrée pour la truie ${truie?.identification || 'inconnue'}: ${formData.nesVivants} porcelets nés vivants.`,
+          type: 'mise_bas',
+          read: false
+        });
+
         toast.success('Mise bas enregistrée avec succès');
       }
       loadData();
+      refreshAlerts();
       setIsDialogOpen(false);
       resetForm();
     } catch (error) {
@@ -227,7 +271,10 @@ const Portees = () => {
       if (sevrageFormData.createLot) {
         const weanedCount = parseInt(sevrageFormData.nombreSevles);
         const totalWeight = parseFloat(sevrageFormData.poidsTotal);
-        const avgWeight = Math.round((totalWeight / weanedCount) * 100) / 100;
+        // Avoid division by zero
+        const avgWeight = weanedCount > 0 
+          ? Math.round((totalWeight / weanedCount) * 100) / 100 
+          : 0;
 
         const newLotData: LotPostSevrage = {
           id: '',
@@ -245,17 +292,25 @@ const Portees = () => {
         };
 
         const createdLot = await api.addLotPostSevrage(newLotData);
+        console.log('Lot Post-Sevrage créé:', createdLot.id, createdLot.identification);
 
-        // Add initial weighing
-        const initialPeseeData: Pesee = {
-          id: '',
-          lotId: createdLot.id,
-          date: sevrageFormData.date,
-          poidsMoyen: avgWeight,
-          nombrePeses: weanedCount,
-          notes: 'Pesée de sevrage',
-        };
-        await api.addPesee(initialPeseeData);
+        // Add initial weighing - with error handling
+        try {
+          const initialPeseeData: Pesee = {
+            id: '',
+            lotId: createdLot.id,
+            date: sevrageFormData.date,
+            poidsMoyen: avgWeight,
+            nombrePeses: weanedCount,
+            notes: 'Pesée de sevrage',
+          };
+          const createdPesee = await api.addPesee(initialPeseeData);
+          console.log('Pesée initiale créée:', createdPesee.id, 'pour lot:', createdLot.id);
+        } catch (peseeError) {
+          console.error('Erreur création pesée initiale:', peseeError);
+          // Still continue - lot was created successfully
+          toast.warning('Lot créé mais erreur lors de l\'enregistrement de la pesée initiale');
+        }
 
         // Create alert for sevrage completion
         await api.addAlert({
@@ -281,7 +336,27 @@ const Portees = () => {
         toast.success('Portée sevrée avec succès');
       }
 
+      // Automate traceability movement (Recorded in both cases)
+      try {
+        const weanedCount = parseInt(sevrageFormData.nombreSevles);
+        const totalWeight = parseFloat(sevrageFormData.poidsTotal);
+        await api.addMouvement({
+          id: '',
+          date: sevrageFormData.date,
+          typeMouvement: 'entree',
+          typeAnimal: 'porcelet',
+          motif: 'naissance',
+          quantite: weanedCount,
+          poids: totalWeight,
+          identification: `SEVRAGE-${truie?.identification || 'UNK'}`,
+          notes: `Sevrage automatique: ${sevrageFormData.createLot ? 'Lot créé' : 'Pas de lot'}`,
+        });
+      } catch (traceError) {
+        console.error('Erreur lors de l\'automatisation de la traçabilité:', traceError);
+      }
+
       loadData();
+      refreshAlerts();
       setIsSevrageDialogOpen(false);
       setSevragePortee(null);
     } catch (error) {
@@ -310,26 +385,100 @@ const Portees = () => {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer cette portée ?')) {
-      const portee = portees.find(p => p.id === id);
-      if (portee) {
+  const openDeleteDialog = (id: string) => {
+    setDeletingId(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deletingId) return;
+    
+    const portee = portees.find(p => p.id === deletingId);
+    if (!portee) return;
+    
+    setIsDeleting(true);
+    try {
+      await api.deletePortee(deletingId);
+      await api.deleteMiseBas(portee.miseBasId);
+      loadData();
+      toast.success('Portée supprimée');
+      setDeleteDialogOpen(false);
+    } catch (error) {
+      setDeleteDialogOpen(false);
+      if (isConstraintError(error)) {
+        setConstraintErrorOpen(true);
+      } else {
+        toast.error('Erreur lors de la suppression');
+      }
+      console.error(error);
+    } finally {
+      setIsDeleting(false);
+      setDeletingId(null);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    setIsDeletingAll(true);
+    let hasConstraintError = false;
+    let deletedCount = 0;
+
+    try {
+      // First try to delete portees
+      for (const portee of portees) {
         try {
-          await api.deletePortee(id);
-          await api.deleteMiseBas(portee.miseBasId);
-          loadData();
-          toast.success('Portée supprimée');
+          await api.deletePortee(portee.id);
+          deletedCount++;
         } catch (error) {
-          console.error(error);
-          toast.error('Erreur lors de la suppression');
+          if (isConstraintError(error)) {
+            hasConstraintError = true;
+          } else {
+            throw error;
+          }
         }
       }
+
+      // Then try to delete remaining mises-bas if they don't have other portees
+      for (const mb of misesBas) {
+        try {
+          await api.deleteMiseBas(mb.id);
+        } catch (error) {
+          if (isConstraintError(error)) {
+            hasConstraintError = true;
+          } else {
+            // We ignore errors for mises-bas if some portees couldn't be deleted
+          }
+        }
+      }
+
+      loadData();
+
+      if (hasConstraintError) {
+        if (deletedCount > 0) {
+          toast.warning(`${deletedCount} portées supprimées, mais certaines n'ont pas pu l'être en raison de dépendances.`);
+        }
+        setDeleteAllDialogOpen(false);
+        setConstraintErrorOpen(true);
+      } else {
+        toast.success('Toutes les portées ont été supprimées');
+        setDeleteAllDialogOpen(false);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+      setDeleteAllDialogOpen(false);
+    } finally {
+      setIsDeletingAll(false);
     }
   };
 
   const filteredPortees = portees.filter(portee => {
     const truie = truies.find(t => t.id === portee.truieId);
     return (truie?.identification || '').toLowerCase().includes(search.toLowerCase());
+  }).sort((a, b) => {
+    const mbA = misesBas.find(m => m.id === a.miseBasId);
+    const mbB = misesBas.find(m => m.id === b.miseBasId);
+    if (!mbA || !mbB) return 0;
+    return new Date(mbB.date).getTime() - new Date(mbA.date).getTime();
   });
 
   return (
@@ -341,16 +490,23 @@ const Portees = () => {
             <h1 className="font-display text-3xl font-bold text-foreground">Portées</h1>
             <p className="text-muted-foreground mt-1">Gérez les mises bas et le suivi des portées</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={(open) => {
-            setIsDialogOpen(open);
-            if (!open) resetForm();
-          }}>
-            <DialogTrigger asChild>
-              <Button className="gap-2" variant="success">
-                <Plus className="h-5 w-5" />
-                Enregistrer une mise bas
-              </Button>
-            </DialogTrigger>
+            <div className="flex flex-wrap gap-2">
+              {portees.length > 0 && (
+                <Button variant="destructive" onClick={() => setDeleteAllDialogOpen(true)} className="gap-2">
+                  <Trash2 className="h-4 w-4" />
+                  Tout effacer
+                </Button>
+              )}
+              <Dialog open={isDialogOpen} onOpenChange={(open) => {
+                setIsDialogOpen(open);
+                if (!open) resetForm();
+              }}>
+                <DialogTrigger asChild>
+                  <Button className="gap-2" variant="success">
+                    <Plus className="h-5 w-5" />
+                    Enregistrer une mise bas
+                  </Button>
+                </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle className="font-display">
@@ -441,6 +597,7 @@ const Portees = () => {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
 
           {/* Sevrage Dialog */}
           <Dialog open={isSevrageDialogOpen} onOpenChange={setIsSevrageDialogOpen}>
@@ -580,7 +737,7 @@ const Portees = () => {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleDelete(portee.id)}
+                        onClick={() => openDeleteDialog(portee.id)}
                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -600,6 +757,44 @@ const Portees = () => {
                       </div>
                     )}
                   </div>
+
+                  {/* Traçabilité génétique - Affichage du verrat père */}
+                  {(() => {
+                    const saillie = miseBas ? saillies.find(s => s.id === miseBas.saillieId) : null;
+                    const verrat = saillie?.verratId ? verrats.find(v => v.id === saillie.verratId) : null;
+                    if (verrat) {
+                      const truieRaceLabel = truie?.race ? (raceLabels[truie.race] || truie.race) : 'Inconnue';
+                      const verratRaceLabel = raceLabels[verrat.race] || verrat.race;
+
+                      const geneticText = (!truie || truie.race === verrat.race) 
+                        ? `Race Pure: ${verratRaceLabel}`
+                        : `Croisement: ${truieRaceLabel.split(' ')[0]} x ${verratRaceLabel.split(' ')[0]}`;
+
+                      return (
+                        <div className="mb-3 p-3 rounded-lg bg-primary/5 border border-primary/10">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-lg">🧬</span>
+                            <div>
+                              <p className="text-sm font-bold text-primary">
+                                {geneticText}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-1">
+                              <span className="font-semibold text-pink-500">Mère:</span>
+                              {truie ? (raceLabels[truie.race] || truie.race) : '?'}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="font-semibold text-blue-500">Père:</span>
+                              {raceLabels[verrat.race] || verrat.race}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
 
                   {miseBas && (
                     <div className="space-y-2 text-sm">
@@ -666,6 +861,32 @@ const Portees = () => {
             })
           )}
         </div>
+        {/* Delete Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          onConfirm={handleDelete}
+          title="Supprimer cette portée ?"
+          description="Êtes-vous sûr de vouloir supprimer cette portée et la mise bas associée ? Cette action est irréversible."
+          isLoading={isDeleting}
+        />
+
+        {/* Constraint Error Dialog */}
+        <ConstraintErrorDialog
+          open={constraintErrorOpen}
+          onOpenChange={setConstraintErrorOpen}
+          itemType="portée"
+        />
+
+        {/* Delete All Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteAllDialogOpen}
+          onOpenChange={setDeleteAllDialogOpen}
+          onConfirm={handleDeleteAll}
+          title="Supprimer toutes les portées ?"
+          description="Êtes-vous sûr de vouloir supprimer toutes les portées et mises bas ? Cette action est irréversible."
+          isLoading={isDeletingAll}
+        />
       </div>
     </MainLayout>
   );

@@ -1,5 +1,5 @@
 import { Alert } from '@/types';
-import { Bell, PiggyBank, ShoppingCart, HeartPulse, Calendar } from 'lucide-react';
+import { Bell, PiggyBank, ShoppingCart, HeartPulse, Calendar, Scale, Target, Heart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -14,6 +14,9 @@ const alertIcons = {
   sevrage: Calendar,
   vente: ShoppingCart,
   sante: HeartPulse,
+  post_sevrage_pret: Scale,
+  engraissement_pret: Target,
+  retour_chaleur: Heart,
 };
 
 const alertColors = {
@@ -21,6 +24,9 @@ const alertColors = {
   sevrage: 'bg-info/10 text-info border-info/20',
   vente: 'bg-success/10 text-success border-success/20',
   sante: 'bg-destructive/10 text-destructive border-destructive/20',
+  post_sevrage_pret: 'bg-success/10 text-success border-success/20',
+  engraissement_pret: 'bg-warning/10 text-warning border-warning/20',
+  retour_chaleur: 'bg-accent/10 text-accent border-accent/20',
 };
 
 export const AlertsList = ({ alerts, onMarkRead }: AlertsListProps) => {

@@ -5,7 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
+import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
+import { isConstraintError } from '@/lib/api';
 import { Vente } from '@/types';
 import { Plus, ShoppingCart, TrendingUp, Search, Edit2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -16,9 +19,11 @@ const typeLabels: Record<Vente['typeAnimal'], string> = {
   porcelet: 'Porcelet',
   porc_engraissement: 'Porc d\'engraissement',
   truie_reforme: 'Truie réformée',
+  verrat_reforme: 'Verrat réformé',
 };
 
 const Ventes = () => {
+  const { refreshAlerts } = useAlertNotifications();
   const [ventes, setVentes] = useState<Vente[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -32,6 +37,15 @@ const Ventes = () => {
   });
   const [search, setSearch] = useState('');
   const [editingVente, setEditingVente] = useState<Vente | null>(null);
+  
+  // Delete dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Delete all dialog state
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   useEffect(() => {
     loadVentes();
@@ -98,10 +112,40 @@ const Ventes = () => {
         };
 
         await api.addVente(newVente);
+
+        // Automate traceability movement
+        try {
+          await api.addMouvement({
+            id: '',
+            date: formData.date,
+            typeMouvement: 'sortie',
+            typeAnimal: (formData.typeAnimal === 'truie_reforme' ? 'truie' : 
+                         formData.typeAnimal === 'verrat_reforme' ? 'verrat' : 
+                         formData.typeAnimal) as any,
+            motif: 'vente',
+            quantite,
+            poids: parseFloat(formData.poidsTotal) || 0,
+            destination: formData.acheteur,
+            notes: `Vente automatique: ${formData.notes}`,
+          });
+        } catch (traceError) {
+          console.error('Erreur lors de l\'automatisation de la traçabilité:', traceError);
+          // Don't block the sale even if traceability fails
+        }
+
+        await api.addAlert({
+          id: '',
+          date: new Date().toISOString(),
+          message: `Nouvelle vente: ${quantite} ${typeLabels[formData.typeAnimal]}${quantite > 1 ? 's' : ''} vendu(s) à ${formData.acheteur || 'un client'} pour ${ (quantite * prixUnitaire).toLocaleString()} FCFA.`,
+          type: 'vente',
+          read: false
+        });
+
         toast.success('Vente enregistrée avec succès');
       }
 
       loadVentes();
+      refreshAlerts();
       setIsDialogOpen(false);
       resetForm();
     } catch (error) {
@@ -124,16 +168,66 @@ const Ventes = () => {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer cette vente ?')) {
-      try {
-        await api.deleteVente(id);
-        loadVentes();
-        toast.success('Vente supprimée');
-      } catch (error) {
-        console.error(error);
-        toast.error('Erreur lors de la suppression');
+  const openDeleteDialog = (id: string) => {
+    setDeletingId(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deletingId) return;
+    
+    setIsDeleting(true);
+    try {
+      await api.deleteVente(deletingId);
+      loadVentes();
+      toast.success('Vente supprimée');
+      setDeleteDialogOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+      setDeleteDialogOpen(false);
+    } finally {
+      setIsDeleting(false);
+      setDeletingId(null);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    setIsDeletingAll(true);
+    let hasConstraintError = false;
+    let deletedCount = 0;
+
+    try {
+      for (const vente of ventes) {
+        try {
+          await api.deleteVente(vente.id);
+          deletedCount++;
+        } catch (error) {
+          if (isConstraintError(error)) {
+            hasConstraintError = true;
+          } else {
+            throw error;
+          }
+        }
       }
+
+      loadVentes();
+
+      if (hasConstraintError) {
+        if (deletedCount > 0) {
+          toast.warning(`${deletedCount} ventes supprimées, mais certaines n'ont pas pu l'être en raison de dépendances.`);
+        }
+        setDeleteAllDialogOpen(false);
+      } else {
+        toast.success('Toutes les ventes ont été supprimées');
+        setDeleteAllDialogOpen(false);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+      setDeleteAllDialogOpen(false);
+    } finally {
+      setIsDeletingAll(false);
     }
   };
 
@@ -154,16 +248,23 @@ const Ventes = () => {
             <h1 className="font-display text-3xl font-bold text-foreground">Ventes</h1>
             <p className="text-muted-foreground mt-1">Enregistrez et suivez vos ventes</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={(open) => {
-            setIsDialogOpen(open);
-            if (!open) resetForm();
-          }}>
-            <DialogTrigger asChild>
-              <Button className="gap-2" variant="success">
-                <Plus className="h-5 w-5" />
-                Nouvelle vente
-              </Button>
-            </DialogTrigger>
+            <div className="flex flex-wrap gap-2">
+              {ventes.length > 0 && (
+                <Button variant="destructive" onClick={() => setDeleteAllDialogOpen(true)} className="gap-2">
+                  <Trash2 className="h-4 w-4" />
+                  Tout effacer
+                </Button>
+              )}
+              <Dialog open={isDialogOpen} onOpenChange={(open) => {
+                setIsDialogOpen(open);
+                if (!open) resetForm();
+              }}>
+                <DialogTrigger asChild>
+                  <Button className="gap-2" variant="success">
+                    <Plus className="h-5 w-5" />
+                    Nouvelle vente
+                  </Button>
+                </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle className="font-display">
@@ -268,6 +369,7 @@ const Ventes = () => {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Stats */}
@@ -350,7 +452,7 @@ const Ventes = () => {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleDelete(vente.id)}
+                            onClick={() => openDeleteDialog(vente.id)}
                             className="h-8 w-8 text-muted-foreground hover:text-destructive"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -364,6 +466,25 @@ const Ventes = () => {
             </table>
           </div>
         </div>
+        {/* Delete Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          onConfirm={handleDelete}
+          title="Supprimer cette vente ?"
+          description="Êtes-vous sûr de vouloir supprimer cette vente ? Cette action est irréversible."
+          isLoading={isDeleting}
+        />
+
+        {/* Delete All Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteAllDialogOpen}
+          onOpenChange={setDeleteAllDialogOpen}
+          onConfirm={handleDeleteAll}
+          title="Supprimer toutes les ventes ?"
+          description="Êtes-vous sûr de vouloir supprimer toutes les ventes ? Cette action est irréversible."
+          isLoading={isDeletingAll}
+        />
       </div>
     </MainLayout>
   );

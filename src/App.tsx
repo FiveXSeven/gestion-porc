@@ -10,6 +10,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Truies from "./pages/Truies";
+import Verrats from "./pages/Verrats";
 import Saillies from "./pages/Saillies";
 import Portees from "./pages/Portees";
 import Ventes from "./pages/Ventes";
@@ -20,6 +21,7 @@ import Engraissement from "./pages/Engraissement";
 import PostSevrage from "./pages/PostSevrage";
 import Sante from "./pages/Sante";
 import Rapports from "./pages/Rapports";
+import Tracabilite from "./pages/Tracabilite";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,6 +43,7 @@ const AppRoutes = () => {
       <Route path="/auth" element={<Auth />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/truies" element={<ProtectedRoute><Truies /></ProtectedRoute>} />
+      <Route path="/verrats" element={<ProtectedRoute><Verrats /></ProtectedRoute>} />
       <Route path="/saillies" element={<ProtectedRoute><Saillies /></ProtectedRoute>} />
       <Route path="/portees" element={<ProtectedRoute><Portees /></ProtectedRoute>} />
       <Route path="/post-sevrage" element={<ProtectedRoute><PostSevrage /></ProtectedRoute>} />
@@ -50,6 +53,7 @@ const AppRoutes = () => {
       <Route path="/stock-aliment" element={<ProtectedRoute><StockAliment /></ProtectedRoute>} />
       <Route path="/sante" element={<ProtectedRoute><Sante /></ProtectedRoute>} />
       <Route path="/rapports" element={<ProtectedRoute><Rapports /></ProtectedRoute>} />
+      <Route path="/tracabilite" element={<ProtectedRoute><Tracabilite /></ProtectedRoute>} />
       <Route path="/alertes" element={<ProtectedRoute><Alertes /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>

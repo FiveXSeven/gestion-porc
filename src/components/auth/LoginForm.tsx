@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +12,7 @@ interface LoginFormProps {
 }
 
 export const LoginForm = ({ onToggleMode }: LoginFormProps) => {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [pin, setPin] = useState('');
   const [showPin, setShowPin] = useState(false);
@@ -35,12 +37,13 @@ export const LoginForm = ({ onToggleMode }: LoginFormProps) => {
     // Simulate network delay
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    const success = login(email, pin);
+    const success = await login(email, pin);
     
     if (success) {
       toast.success('Connexion réussie !');
+      navigate('/dashboard');
     } else {
-      toast.error('Email ou code PIN incorrect');
+      // toast.error is already handled inside AuthContext or here if needed
     }
     
     setIsLoading(false);

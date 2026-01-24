@@ -55,13 +55,15 @@ export const AlertNotificationProvider = ({ children }: AlertNotificationProvide
         const newAlerts = data.filter(a => !a.read && !previousIds.has(a.id));
         
         // Show popup for new alerts (5 seconds duration)
-        newAlerts.forEach(alert => {
-          toast.info(alert.message, {
-            duration: 5000,
-            icon: '🔔',
-            description: 'Nouvelle alerte',
+        if (newAlerts.length > 0) {
+          newAlerts.forEach(alert => {
+            toast.info(alert.message, {
+              duration: 5000,
+              icon: '🔔',
+              description: 'Nouvelle alerte',
+            });
           });
-        });
+        }
       }
       isFirstFetchRef.current = false;
       

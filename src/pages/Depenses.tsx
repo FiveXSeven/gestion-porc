@@ -5,7 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
 import * as api from '@/lib/api';
+import { isConstraintError } from '@/lib/api';
 import { Depense } from '@/types';
 import { Plus, Receipt, TrendingDown, Wheat, Stethoscope, Wrench, Users, Building, MoreHorizontal, Search, Edit2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -52,6 +54,15 @@ const Depenses = () => {
   });
   const [search, setSearch] = useState('');
   const [editingDepense, setEditingDepense] = useState<Depense | null>(null);
+  
+  // Delete dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Delete all dialog state
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   useEffect(() => {
     loadDepenses();
@@ -129,16 +140,67 @@ const Depenses = () => {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer cette dépense ?')) {
-      try {
-        await api.deleteDepense(id);
-        loadDepenses();
-        toast.success('Dépense supprimée');
-      } catch (error) {
-        console.error(error);
-        toast.error('Erreur lors de la suppression');
+  const openDeleteDialog = (id: string) => {
+    setDeletingId(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deletingId) return;
+    
+    setIsDeleting(true);
+    try {
+      await api.deleteDepense(deletingId);
+      loadDepenses();
+      toast.success('Dépense supprimée');
+      setDeleteDialogOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+      setDeleteDialogOpen(false);
+    } finally {
+      setIsDeleting(false);
+      setDeletingId(null);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    setIsDeletingAll(true);
+    let hasConstraintError = false;
+    let deletedCount = 0;
+
+    try {
+      for (const depense of depenses) {
+        try {
+          await api.deleteDepense(depense.id);
+          deletedCount++;
+        } catch (error) {
+          if (isConstraintError(error)) {
+            hasConstraintError = true;
+          } else {
+            throw error;
+          }
+        }
       }
+
+      loadDepenses();
+
+      if (hasConstraintError) {
+        if (deletedCount > 0) {
+          toast.warning(`${deletedCount} dépenses supprimées, mais certaines n'ont pas pu l'être en raison de dépendances.`);
+        }
+        setDeleteAllDialogOpen(false);
+        // Depenses doesn't use ConstraintErrorDialog in manual delete either, but warning toast is provided.
+      } else {
+        toast.success('Toutes les dépenses ont été supprimées');
+        setDeleteAllDialogOpen(false);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+      setDeleteAllDialogOpen(false);
+    } finally {
+      setIsDeletingAll(false);
     }
   };
 
@@ -171,16 +233,23 @@ const Depenses = () => {
             <h1 className="font-display text-3xl font-bold text-foreground">Dépenses</h1>
             <p className="text-muted-foreground mt-1">Suivez vos coûts d'exploitation</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={(open) => {
-            setIsDialogOpen(open);
-            if (!open) resetForm();
-          }}>
-            <DialogTrigger asChild>
-              <Button className="gap-2" variant="destructive">
-                <Plus className="h-5 w-5" />
-                Nouvelle dépense
-              </Button>
-            </DialogTrigger>
+            <div className="flex flex-wrap gap-2">
+              {depenses.length > 0 && (
+                <Button variant="destructive" onClick={() => setDeleteAllDialogOpen(true)} className="gap-2">
+                  <Trash2 className="h-4 w-4" />
+                  Tout effacer
+                </Button>
+              )}
+              <Dialog open={isDialogOpen} onOpenChange={(open) => {
+                setIsDialogOpen(open);
+                if (!open) resetForm();
+              }}>
+                <DialogTrigger asChild>
+                  <Button className="gap-2" variant="destructive">
+                    <Plus className="h-5 w-5" />
+                    Nouvelle dépense
+                  </Button>
+                </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle className="font-display">
@@ -255,6 +324,7 @@ const Depenses = () => {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Stats & Chart */}
@@ -374,7 +444,7 @@ const Depenses = () => {
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => handleDelete(depense.id)}
+                              onClick={() => openDeleteDialog(depense.id)}
                               className="h-8 w-8 text-muted-foreground hover:text-destructive"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -389,6 +459,25 @@ const Depenses = () => {
             </table>
           </div>
         </div>
+        {/* Delete Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          onConfirm={handleDelete}
+          title="Supprimer cette dépense ?"
+          description="Êtes-vous sûr de vouloir supprimer cette dépense ? Cette action est irréversible."
+          isLoading={isDeleting}
+        />
+
+        {/* Delete All Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteAllDialogOpen}
+          onOpenChange={setDeleteAllDialogOpen}
+          onConfirm={handleDeleteAll}
+          title="Supprimer toutes les dépenses ?"
+          description="Êtes-vous sûr de vouloir supprimer toutes les dépenses ? Cette action est irréversible."
+          isLoading={isDeletingAll}
+        />
       </div>
     </MainLayout>
   );

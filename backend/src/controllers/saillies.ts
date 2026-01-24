@@ -36,6 +36,7 @@ export const create = async (req: Request, res: Response) => {
         const newSaillie = await prisma.saillie.create({
             data: {
                 truieId: data.truieId,
+                verratId: data.verratId || null, // Lien optionnel vers le verrat
                 date: new Date(data.date),
                 methode: data.methode,
                 employe: data.employe,

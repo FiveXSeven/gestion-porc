@@ -1,5 +1,16 @@
 import { Request, Response } from 'express';
 import prisma from '../prisma';
+import { z } from 'zod';
+
+const truieSchema = z.object({
+    identification: z.string().min(1, 'Identification requise'),
+    race: z.enum(['large_white', 'landrace', 'pietrain', 'duroc', 'autre']).optional().default('large_white'),
+    dateEntree: z.string().or(z.date()),
+    dateNaissance: z.string().or(z.date()),
+    poids: z.number().positive('Poids doit être positif'),
+    statut: z.enum(['active', 'gestante', 'allaitante', 'reformee', 'vendue']),
+    notes: z.string().optional()
+});
 
 // ERREUR #18: Exclure les truies archivées par défaut
 export const getAll = async (req: Request, res: Response) => {
@@ -16,10 +27,11 @@ export const getAll = async (req: Request, res: Response) => {
 
 export const create = async (req: Request, res: Response) => {
     try {
-        const data = req.body;
+        const data = truieSchema.parse(req.body);
         const newTruie = await prisma.truie.create({
             data: {
                 identification: data.identification,
+                race: data.race,
                 dateEntree: new Date(data.dateEntree),
                 dateNaissance: new Date(data.dateNaissance),
                 poids: data.poids,
@@ -28,7 +40,10 @@ export const create = async (req: Request, res: Response) => {
             },
         });
         res.status(201).json(newTruie);
-    } catch (error) {
+    } catch (error: any) {
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: error.errors[0].message });
+        }
         console.error(error);
         res.status(500).json({ error: 'Error creating truie' });
     }
@@ -37,7 +52,7 @@ export const create = async (req: Request, res: Response) => {
 export const update = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const data = req.body;
+        const data = truieSchema.partial().parse(req.body);
         const updatedTruie = await prisma.truie.update({
             where: { id },
             data: {
@@ -47,7 +62,10 @@ export const update = async (req: Request, res: Response) => {
             },
         });
         res.json(updatedTruie);
-    } catch (error) {
+    } catch (error: any) {
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: error.errors[0].message });
+        }
         res.status(500).json({ error: 'Error updating truie' });
     }
 };
