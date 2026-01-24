@@ -2,18 +2,76 @@ import { User, Truie, Verrat, Saillie, MiseBas, Portee, Vente, Depense, Alert, L
 
 const API_URL = 'http://localhost:3000/api';
 
+// Custom error class for API errors
+export class ApiError extends Error {
+    code: 'CONSTRAINT_ERROR' | 'NOT_FOUND' | 'UNKNOWN';
+    
+    constructor(message: string, code: 'CONSTRAINT_ERROR' | 'NOT_FOUND' | 'UNKNOWN' = 'UNKNOWN') {
+        super(message);
+        this.name = 'ApiError';
+        this.code = code;
+    }
+}
+
+// Helper to check if an error is a constraint error
+export function isConstraintError(error: unknown): error is ApiError {
+    return error instanceof ApiError && error.code === 'CONSTRAINT_ERROR';
+}
+
 async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T> {
+    const token = localStorage.getItem('authToken');
+    
     const response = await fetch(`${API_URL}${endpoint}`, {
         ...options,
         cache: 'no-store',
         headers: {
             'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
             ...options?.headers,
         },
     });
 
+    if (response.status === 401 || response.status === 403) {
+        // Token expiré ou invalide
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('userEmail');
+        localStorage.removeItem('isAuthenticated');
+        if (typeof window !== 'undefined') {
+            window.location.href = '/login';
+        }
+    }
+
     if (!response.ok) {
-        throw new Error(`API error: ${response.statusText}`);
+        // Try to parse error body
+        let errorMessage = response.statusText;
+        let errorCode: 'CONSTRAINT_ERROR' | 'NOT_FOUND' | 'UNKNOWN' = 'UNKNOWN';
+        
+        try {
+            const body = await response.json();
+            errorMessage = body.error || body.message || response.statusText;
+            
+            // Detect constraint errors (foreign key violations)
+            const lowerMessage = errorMessage.toLowerCase();
+            if (
+                response.status === 400 || 
+                response.status === 409 ||
+                lowerMessage.includes('foreign key') ||
+                lowerMessage.includes('constraint') ||
+                lowerMessage.includes('utilisé') ||
+                lowerMessage.includes('référencé') ||
+                lowerMessage.includes('lié') ||
+                lowerMessage.includes('cannot delete') ||
+                lowerMessage.includes('violates')
+            ) {
+                errorCode = 'CONSTRAINT_ERROR';
+            } else if (response.status === 404) {
+                errorCode = 'NOT_FOUND';
+            }
+        } catch {
+            // JSON parsing failed, use status text
+        }
+        
+        throw new ApiError(errorMessage, errorCode);
     }
 
     // Handle 204 No Content
@@ -26,10 +84,10 @@ async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T>
 
 // Auth
 export const login = (email: string, pin: string) => 
-    fetchJson<User>('/auth/login', { method: 'POST', body: JSON.stringify({ email, pin }) });
+    fetchJson<{ user: User, token: string }>('/auth/login', { method: 'POST', body: JSON.stringify({ email, pin }) });
 
 export const register = (email: string, pin: string, name: string) => 
-    fetchJson<User>('/auth/register', { method: 'POST', body: JSON.stringify({ email, pin, name }) });
+    fetchJson<{ user: User, token: string }>('/auth/register', { method: 'POST', body: JSON.stringify({ email, pin, name }) });
 
 export const getMe = (email: string) => 
     fetchJson<User>(`/auth/me?email=${encodeURIComponent(email)}`);

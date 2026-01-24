@@ -42,12 +42,12 @@ export const RegisterForm = ({ onToggleMode }: RegisterFormProps) => {
     // Simulate network delay
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    const success = register(email, pin, name);
+    const success = await register(email, pin, name);
     
     if (success) {
       toast.success('Compte créé avec succès !');
     } else {
-      toast.error('Erreur lors de la création du compte');
+      // toast.error is already handled inside AuthContext or here if needed
     }
     
     setIsLoading(false);

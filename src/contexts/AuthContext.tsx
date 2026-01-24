@@ -21,9 +21,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const initAuth = async () => {
       const storedEmail = localStorage.getItem('userEmail');
+      const token = localStorage.getItem('authToken');
       const isAuth = localStorage.getItem('isAuthenticated') === 'true';
       
-      if (storedEmail && isAuth) {
+      if (storedEmail && token && isAuth) {
         try {
           const userData = await api.getMe(storedEmail);
           setUser(userData);
@@ -32,6 +33,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           console.error('Session restore failed:', error);
           localStorage.removeItem('isAuthenticated');
           localStorage.removeItem('userEmail');
+          localStorage.removeItem('authToken');
         }
       }
       setLoading(false);
@@ -42,11 +44,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (email: string, pin: string): Promise<boolean> => {
     try {
-      const userData = await api.login(email, pin);
+      const { user: userData, token } = await api.login(email, pin);
       setUser(userData);
       setAuthenticatedState(true);
       localStorage.setItem('isAuthenticated', 'true');
       localStorage.setItem('userEmail', email);
+      localStorage.setItem('authToken', token);
       return true;
     } catch (error) {
       toast.error('Email ou code PIN incorrect');
@@ -56,11 +59,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const register = async (email: string, pin: string, name: string): Promise<boolean> => {
     try {
-      const userData = await api.register(email, pin, name);
+      const { user: userData, token } = await api.register(email, pin, name);
       setUser(userData);
       setAuthenticatedState(true);
       localStorage.setItem('isAuthenticated', 'true');
       localStorage.setItem('userEmail', email);
+      localStorage.setItem('authToken', token);
       return true;
     } catch (error) {
       toast.error('Erreur lors de l\'inscription');
@@ -73,6 +77,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setAuthenticatedState(false);
     localStorage.removeItem('isAuthenticated');
     localStorage.removeItem('userEmail');
+    localStorage.removeItem('authToken');
   };
 
   if (loading) {

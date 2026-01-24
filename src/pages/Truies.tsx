@@ -5,7 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
+import { ConstraintErrorDialog } from '@/components/ui/ConstraintErrorDialog';
 import * as api from '@/lib/api';
+import { isConstraintError } from '@/lib/api';
 import { Truie, Saillie, MiseBas, Portee } from '@/types';
 import { Plus, Search, Edit2, Trash2, PiggyBank, Eye, Heart, Calendar, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
@@ -43,6 +46,16 @@ const Truies = () => {
   const [filterStatut, setFilterStatut] = useState<string>('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTruie, setEditingTruie] = useState<Truie | null>(null);
+  
+  // Delete dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [constraintErrorOpen, setConstraintErrorOpen] = useState(false);
+  
+  // Delete all dialog state
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
   
   // Detail view state
   const [detailTruie, setDetailTruie] = useState<Truie | null>(null);
@@ -135,16 +148,71 @@ const Truies = () => {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer cette truie ?')) {
-      try {
-        await api.deleteTruie(id);
-        loadTruies();
-        toast.success('Truie supprimée');
-      } catch (error) {
+  const openDeleteDialog = (id: string) => {
+    setDeletingId(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deletingId) return;
+    
+    setIsDeleting(true);
+    try {
+      await api.deleteTruie(deletingId);
+      loadTruies();
+      toast.success('Truie supprimée');
+      setDeleteDialogOpen(false);
+    } catch (error) {
+      setDeleteDialogOpen(false);
+      if (isConstraintError(error)) {
+        setConstraintErrorOpen(true);
+      } else {
         toast.error('Erreur lors de la suppression');
-        console.error(error);
       }
+      console.error(error);
+    } finally {
+      setIsDeleting(false);
+      setDeletingId(null);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    setIsDeletingAll(true);
+    let hasConstraintError = false;
+    let deletedCount = 0;
+
+    try {
+      for (const truie of truies) {
+        try {
+          await api.deleteTruie(truie.id);
+          deletedCount++;
+        } catch (error) {
+          if (isConstraintError(error)) {
+            hasConstraintError = true;
+          } else {
+            throw error;
+          }
+        }
+      }
+
+      loadTruies();
+
+      if (hasConstraintError) {
+        if (deletedCount > 0) {
+          toast.warning(`${deletedCount} truies supprimées, mais certaines n'ont pas pu l'être en raison de dépendances.`);
+        }
+        setDeleteAllDialogOpen(false);
+        setConstraintErrorOpen(true);
+      } else {
+        toast.success('Toutes les truies ont été supprimées');
+        setDeleteAllDialogOpen(false);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+      setDeleteAllDialogOpen(false);
+    } finally {
+      setIsDeletingAll(false);
     }
   };
 
@@ -197,6 +265,26 @@ const Truies = () => {
     return matchSearch && matchStatut;
   }).sort((a, b) => new Date(b.dateEntree).getTime() - new Date(a.dateEntree).getTime());
 
+  const calculateAge = (dateNaissance: string): string => {
+    if (!dateNaissance) return '-';
+    const birth = new Date(dateNaissance);
+    const now = new Date();
+    
+    let years = now.getFullYear() - birth.getFullYear();
+    let months = now.getMonth() - birth.getMonth();
+    
+    if (months < 0 || (months === 0 && now.getDate() < birth.getDate())) {
+      years--;
+      months += 12;
+    }
+    
+    if (years > 0) {
+      if (months === 0) return `${years} an${years > 1 ? 's' : ''}`;
+      return `${years} an${years > 1 ? 's' : ''} ${months}m`;
+    }
+    return `${months} mois`;
+  };
+
   return (
     <MainLayout>
       <div className="space-y-6">
@@ -206,16 +294,23 @@ const Truies = () => {
             <h1 className="font-display text-3xl font-bold text-foreground">Truies</h1>
             <p className="text-muted-foreground mt-1">Gérez votre cheptel de truies</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={(open) => {
-            setIsDialogOpen(open);
-            if (!open) resetForm();
-          }}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="h-5 w-5" />
-                Ajouter une truie
-              </Button>
-            </DialogTrigger>
+            <div className="flex flex-wrap gap-2">
+              {truies.length > 0 && (
+                <Button variant="destructive" onClick={() => setDeleteAllDialogOpen(true)} className="gap-2">
+                  <Trash2 className="h-4 w-4" />
+                  Tout effacer
+                </Button>
+              )}
+              <Dialog open={isDialogOpen} onOpenChange={(open) => {
+                setIsDialogOpen(open);
+                if (!open) resetForm();
+              }}>
+                <DialogTrigger asChild>
+                  <Button className="gap-2">
+                    <Plus className="h-5 w-5" />
+                    Ajouter une truie
+                  </Button>
+                </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle className="font-display">
@@ -318,6 +413,7 @@ const Truies = () => {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Filters */}
@@ -352,6 +448,7 @@ const Truies = () => {
                 <tr>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-foreground">Identification</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-foreground">Race</th>
+                  <th className="text-left py-4 px-6 text-sm font-semibold text-foreground">Âge</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-foreground">Date d'entrée</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-foreground">Poids</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-foreground">Statut</th>
@@ -384,6 +481,9 @@ const Truies = () => {
                       </td>
                       <td className="py-4 px-6 text-muted-foreground">
                         {raceLabels[truie.race] || truie.race}
+                      </td>
+                      <td className="py-4 px-6 text-muted-foreground">
+                        {calculateAge(truie.dateNaissance)}
                       </td>
                       <td className="py-4 px-6 text-muted-foreground">
                         {format(new Date(truie.dateEntree), "d MMM yyyy", { locale: fr })}
@@ -422,7 +522,7 @@ const Truies = () => {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleDelete(truie.id)}
+                            onClick={() => openDeleteDialog(truie.id)}
                             className="h-9 w-9 text-muted-foreground hover:text-destructive"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -470,6 +570,23 @@ const Truies = () => {
                     <div className="p-3 rounded-xl bg-success/10 text-center">
                       <p className="text-2xl font-bold text-success">{calculatePerformanceScore()}%</p>
                       <p className="text-xs text-muted-foreground">Score perf.</p>
+                    </div>
+                  </div>
+
+                  {/* Quick Info Box */}
+                  <div className="bg-muted/30 rounded-2xl p-4 flex items-center justify-between border border-border/50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center shadow-sm">
+                        <Calendar className="h-6 w-6 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Âge actuel</p>
+                        <p className="text-lg font-bold text-foreground">{calculateAge(detailTruie.dateNaissance)}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold text-right">Date Naissance</p>
+                      <p className="text-sm font-medium">{detailTruie.dateNaissance ? format(new Date(detailTruie.dateNaissance), "d MMM yyyy", { locale: fr }) : '-'}</p>
                     </div>
                   </div>
 
@@ -546,6 +663,33 @@ const Truies = () => {
             )}
           </DialogContent>
         </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          onConfirm={handleDelete}
+          title="Supprimer cette truie ?"
+          description="Êtes-vous sûr de vouloir supprimer cette truie ? Cette action est irréversible."
+          isLoading={isDeleting}
+        />
+
+        {/* Constraint Error Dialog */}
+        <ConstraintErrorDialog
+          open={constraintErrorOpen}
+          onOpenChange={setConstraintErrorOpen}
+          itemType="truie"
+        />
+
+        {/* Delete All Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteAllDialogOpen}
+          onOpenChange={setDeleteAllDialogOpen}
+          onConfirm={handleDeleteAll}
+          title="Supprimer toutes les truies ?"
+          description="Êtes-vous sûr de vouloir supprimer toutes les truies ? Cette action est irréversible."
+          isLoading={isDeletingAll}
+        />
       </div>
     </MainLayout>
   );

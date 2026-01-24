@@ -5,8 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
+import { ConstraintErrorDialog } from '@/components/ui/ConstraintErrorDialog';
 import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
+import { isConstraintError } from '@/lib/api';
 import { Verrat } from '@/types';
 import { Plus, Search, Edit2, Trash2, TrendingUp, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -48,7 +51,22 @@ const Verrats = () => {
   });
   const [search, setSearch] = useState('');
   const [editingVerrat, setEditingVerrat] = useState<Verrat | null>(null);
-  const [stats, setStats] = useState<Record<string, { totalSaillies: number; tauxReussite: number }>>({});
+  const [stats, setStats] = useState<Record<string, { totalSaillies: number; tauxReussite: number }>>({}); 
+  
+  // Delete dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [constraintErrorOpen, setConstraintErrorOpen] = useState(false);
+  
+  // Delete all dialog state
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
+  
+  // Reforme dialog state
+  const [reformeDialogOpen, setReformeDialogOpen] = useState(false);
+  const [reformingId, setReformingId] = useState<string | null>(null);
+  const [isReforming, setIsReforming] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -146,39 +164,104 @@ const Verrats = () => {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer ce verrat ?')) {
-      try {
-        await api.deleteVerrat(id);
-        loadData();
-        toast.success('Verrat supprimé');
-      } catch (error: unknown) {
-        console.error(error);
-        const errorMessage = error instanceof Error ? error.message : 'Erreur lors de la suppression';
-        toast.error(errorMessage);
+  const openDeleteDialog = (id: string) => {
+    setDeletingId(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deletingId) return;
+    
+    setIsDeleting(true);
+    try {
+      await api.deleteVerrat(deletingId);
+      loadData();
+      toast.success('Verrat supprimé');
+      setDeleteDialogOpen(false);
+    } catch (error) {
+      setDeleteDialogOpen(false);
+      if (isConstraintError(error)) {
+        setConstraintErrorOpen(true);
+      } else {
+        toast.error('Erreur lors de la suppression');
       }
+      console.error(error);
+    } finally {
+      setIsDeleting(false);
+      setDeletingId(null);
     }
   };
 
-  const handleReforme = async (id: string) => {
-    if (confirm('Êtes-vous sûr de vouloir réformer ce verrat ?')) {
-      try {
-        await api.reformeVerrat(id);
-        const verrat = verrats.find(v => v.id === id);
-        await api.addAlert({
-          id: '',
-          date: new Date().toISOString(),
-          message: `Le verrat ${verrat?.identification} a été réformé.`,
-          type: 'sante',
-          read: false
-        });
-        loadData();
-        refreshAlerts();
-        toast.success('Verrat réformé avec succès');
-      } catch (error) {
-        console.error(error);
-        toast.error('Erreur lors de la réforme');
+  const handleDeleteAll = async () => {
+    setIsDeletingAll(true);
+    let hasConstraintError = false;
+    let deletedCount = 0;
+
+    try {
+      for (const verrat of verrats) {
+        try {
+          await api.deleteVerrat(verrat.id);
+          deletedCount++;
+        } catch (error) {
+          if (isConstraintError(error)) {
+            hasConstraintError = true;
+          } else {
+            throw error;
+          }
+        }
       }
+
+      loadData();
+
+      if (hasConstraintError) {
+        if (deletedCount > 0) {
+          toast.warning(`${deletedCount} verrats supprimés, mais certains n'ont pas pu l'être en raison de dépendances.`);
+        }
+        setDeleteAllDialogOpen(false);
+        setConstraintErrorOpen(true);
+      } else {
+        toast.success('Tous les verrats ont été supprimés');
+        setDeleteAllDialogOpen(false);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+      setDeleteAllDialogOpen(false);
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
+
+  const openReformeDialog = (id: string) => {
+    setReformingId(id);
+    setReformeDialogOpen(true);
+  };
+
+  const handleReforme = async () => {
+    if (!reformingId) return;
+    
+    setIsReforming(true);
+    try {
+      await api.reformeVerrat(reformingId);
+      const verrat = verrats.find(v => v.id === reformingId);
+      await api.addAlert({
+        id: '',
+        date: new Date().toISOString(),
+        message: `Le verrat ${verrat?.identification} a été réformé.`,
+        type: 'sante',
+        read: false
+      });
+      loadData();
+      refreshAlerts();
+      toast.success('Verrat réformé avec succès');
+      setReformeDialogOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la réforme');
+      setReformeDialogOpen(false);
+    } finally {
+      setIsReforming(false);
+      setReformingId(null);
     }
   };
 
@@ -187,8 +270,24 @@ const Verrats = () => {
     raceLabels[verrat.race]?.toLowerCase().includes(search.toLowerCase())
   ).sort((a, b) => new Date(b.dateEntree).getTime() - new Date(a.dateEntree).getTime());
 
-  const getAge = (dateNaissance: string) => {
-    return differenceInYears(new Date(), new Date(dateNaissance));
+  const getAge = (dateNaissance: string): string => {
+    if (!dateNaissance) return '-';
+    const birth = new Date(dateNaissance);
+    const now = new Date();
+    
+    let years = now.getFullYear() - birth.getFullYear();
+    let months = now.getMonth() - birth.getMonth();
+    
+    if (months < 0 || (months === 0 && now.getDate() < birth.getDate())) {
+      years--;
+      months += 12;
+    }
+    
+    if (years > 0) {
+      if (months === 0) return `${years} an${years > 1 ? 's' : ''}`;
+      return `${years} an${years > 1 ? 's' : ''} ${months}m`;
+    }
+    return `${months} mois`;
   };
 
   return (
@@ -200,16 +299,23 @@ const Verrats = () => {
             <h1 className="font-display text-3xl font-bold text-foreground">Verrats</h1>
             <p className="text-muted-foreground mt-1">Gérez vos verrats reproducteurs</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={(open) => {
-            setIsDialogOpen(open);
-            if (!open) resetForm();
-          }}>
-            <DialogTrigger asChild>
-              <Button className="gap-2" variant="default">
-                <Plus className="h-5 w-5" />
-                Ajouter un verrat
-              </Button>
-            </DialogTrigger>
+            <div className="flex flex-wrap gap-2">
+              {verrats.length > 0 && (
+                <Button variant="destructive" onClick={() => setDeleteAllDialogOpen(true)} className="gap-2">
+                  <Trash2 className="h-4 w-4" />
+                  Tout effacer
+                </Button>
+              )}
+              <Dialog open={isDialogOpen} onOpenChange={(open) => {
+                setIsDialogOpen(open);
+                if (!open) resetForm();
+              }}>
+                <DialogTrigger asChild>
+                  <Button className="gap-2" variant="default">
+                    <Plus className="h-5 w-5" />
+                    Ajouter un verrat
+                  </Button>
+                </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle className="font-display">
@@ -297,6 +403,7 @@ const Verrats = () => {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Search */}
@@ -372,12 +479,12 @@ const Verrats = () => {
 
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div className="p-3 rounded-xl bg-muted/50 text-center">
-                    <p className="text-2xl font-bold text-foreground">{verrat.poids}</p>
-                    <p className="text-xs text-muted-foreground">kg</p>
+                    <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-1">Âge</p>
+                    <p className="text-lg font-bold text-foreground">{getAge(verrat.dateNaissance)}</p>
                   </div>
                   <div className="p-3 rounded-xl bg-muted/50 text-center">
-                    <p className="text-2xl font-bold text-foreground">{getAge(verrat.dateNaissance)}</p>
-                    <p className="text-xs text-muted-foreground">ans</p>
+                    <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-1">Poids</p>
+                    <p className="text-lg font-bold text-foreground">{verrat.poids} kg</p>
                   </div>
                 </div>
 
@@ -421,7 +528,7 @@ const Verrats = () => {
                           variant="ghost"
                           size="sm"
                           className="flex-1 gap-1 text-warning hover:text-warning"
-                          onClick={() => handleReforme(verrat.id)}
+                          onClick={() => openReformeDialog(verrat.id)}
                         >
                           <AlertTriangle className="h-4 w-4" />
                           Réformer
@@ -435,7 +542,7 @@ const Verrats = () => {
                         "text-destructive hover:text-destructive",
                         verrat.statut === 'reforme' && "ml-auto"
                       )}
-                      onClick={() => handleDelete(verrat.id)}
+                      onClick={() => openDeleteDialog(verrat.id)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -445,6 +552,42 @@ const Verrats = () => {
             ))
           )}
         </div>
+        {/* Delete Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          onConfirm={handleDelete}
+          title="Supprimer ce verrat ?"
+          description="Êtes-vous sûr de vouloir supprimer ce verrat ? Cette action est irréversible."
+          isLoading={isDeleting}
+        />
+
+        {/* Reforme Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={reformeDialogOpen}
+          onOpenChange={setReformeDialogOpen}
+          onConfirm={handleReforme}
+          title="Réformer ce verrat ?"
+          description="Êtes-vous sûr de vouloir réformer ce verrat ? Il sera marqué comme inactif pour la reproduction."
+          isLoading={isReforming}
+        />
+
+        {/* Constraint Error Dialog */}
+        <ConstraintErrorDialog
+          open={constraintErrorOpen}
+          onOpenChange={setConstraintErrorOpen}
+          itemType="verrat"
+        />
+
+        {/* Delete All Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteAllDialogOpen}
+          onOpenChange={setDeleteAllDialogOpen}
+          onConfirm={handleDeleteAll}
+          title="Supprimer tous les verrats ?"
+          description="Êtes-vous sûr de vouloir supprimer tous les verrats ? Cette action est irréversible."
+          isLoading={isDeletingAll}
+        />
       </div>
     </MainLayout>
   );

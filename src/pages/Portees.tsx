@@ -5,8 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
+import { ConstraintErrorDialog } from '@/components/ui/ConstraintErrorDialog';
 import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
+import { isConstraintError } from '@/lib/api';
 import { Portee, MiseBas, Truie, Saillie, Verrat, LotPostSevrage, Pesee } from '@/types';
 
 const raceLabels: Record<string, string> = {
@@ -63,6 +66,16 @@ const Portees = () => {
     nombreSevles: '',
     createLot: true,
   });
+  
+  // Delete dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [constraintErrorOpen, setConstraintErrorOpen] = useState(false);
+  
+  // Delete all dialog state
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -372,20 +385,89 @@ const Portees = () => {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer cette portée ?')) {
-      const portee = portees.find(p => p.id === id);
-      if (portee) {
+  const openDeleteDialog = (id: string) => {
+    setDeletingId(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deletingId) return;
+    
+    const portee = portees.find(p => p.id === deletingId);
+    if (!portee) return;
+    
+    setIsDeleting(true);
+    try {
+      await api.deletePortee(deletingId);
+      await api.deleteMiseBas(portee.miseBasId);
+      loadData();
+      toast.success('Portée supprimée');
+      setDeleteDialogOpen(false);
+    } catch (error) {
+      setDeleteDialogOpen(false);
+      if (isConstraintError(error)) {
+        setConstraintErrorOpen(true);
+      } else {
+        toast.error('Erreur lors de la suppression');
+      }
+      console.error(error);
+    } finally {
+      setIsDeleting(false);
+      setDeletingId(null);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    setIsDeletingAll(true);
+    let hasConstraintError = false;
+    let deletedCount = 0;
+
+    try {
+      // First try to delete portees
+      for (const portee of portees) {
         try {
-          await api.deletePortee(id);
-          await api.deleteMiseBas(portee.miseBasId);
-          loadData();
-          toast.success('Portée supprimée');
+          await api.deletePortee(portee.id);
+          deletedCount++;
         } catch (error) {
-          console.error(error);
-          toast.error('Erreur lors de la suppression');
+          if (isConstraintError(error)) {
+            hasConstraintError = true;
+          } else {
+            throw error;
+          }
         }
       }
+
+      // Then try to delete remaining mises-bas if they don't have other portees
+      for (const mb of misesBas) {
+        try {
+          await api.deleteMiseBas(mb.id);
+        } catch (error) {
+          if (isConstraintError(error)) {
+            hasConstraintError = true;
+          } else {
+            // We ignore errors for mises-bas if some portees couldn't be deleted
+          }
+        }
+      }
+
+      loadData();
+
+      if (hasConstraintError) {
+        if (deletedCount > 0) {
+          toast.warning(`${deletedCount} portées supprimées, mais certaines n'ont pas pu l'être en raison de dépendances.`);
+        }
+        setDeleteAllDialogOpen(false);
+        setConstraintErrorOpen(true);
+      } else {
+        toast.success('Toutes les portées ont été supprimées');
+        setDeleteAllDialogOpen(false);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+      setDeleteAllDialogOpen(false);
+    } finally {
+      setIsDeletingAll(false);
     }
   };
 
@@ -408,16 +490,23 @@ const Portees = () => {
             <h1 className="font-display text-3xl font-bold text-foreground">Portées</h1>
             <p className="text-muted-foreground mt-1">Gérez les mises bas et le suivi des portées</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={(open) => {
-            setIsDialogOpen(open);
-            if (!open) resetForm();
-          }}>
-            <DialogTrigger asChild>
-              <Button className="gap-2" variant="success">
-                <Plus className="h-5 w-5" />
-                Enregistrer une mise bas
-              </Button>
-            </DialogTrigger>
+            <div className="flex flex-wrap gap-2">
+              {portees.length > 0 && (
+                <Button variant="destructive" onClick={() => setDeleteAllDialogOpen(true)} className="gap-2">
+                  <Trash2 className="h-4 w-4" />
+                  Tout effacer
+                </Button>
+              )}
+              <Dialog open={isDialogOpen} onOpenChange={(open) => {
+                setIsDialogOpen(open);
+                if (!open) resetForm();
+              }}>
+                <DialogTrigger asChild>
+                  <Button className="gap-2" variant="success">
+                    <Plus className="h-5 w-5" />
+                    Enregistrer une mise bas
+                  </Button>
+                </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle className="font-display">
@@ -508,6 +597,7 @@ const Portees = () => {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
 
           {/* Sevrage Dialog */}
           <Dialog open={isSevrageDialogOpen} onOpenChange={setIsSevrageDialogOpen}>
@@ -647,7 +737,7 @@ const Portees = () => {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleDelete(portee.id)}
+                        onClick={() => openDeleteDialog(portee.id)}
                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -771,6 +861,32 @@ const Portees = () => {
             })
           )}
         </div>
+        {/* Delete Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          onConfirm={handleDelete}
+          title="Supprimer cette portée ?"
+          description="Êtes-vous sûr de vouloir supprimer cette portée et la mise bas associée ? Cette action est irréversible."
+          isLoading={isDeleting}
+        />
+
+        {/* Constraint Error Dialog */}
+        <ConstraintErrorDialog
+          open={constraintErrorOpen}
+          onOpenChange={setConstraintErrorOpen}
+          itemType="portée"
+        />
+
+        {/* Delete All Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteAllDialogOpen}
+          onOpenChange={setDeleteAllDialogOpen}
+          onConfirm={handleDeleteAll}
+          title="Supprimer toutes les portées ?"
+          description="Êtes-vous sûr de vouloir supprimer toutes les portées et mises bas ? Cette action est irréversible."
+          isLoading={isDeletingAll}
+        />
       </div>
     </MainLayout>
   );

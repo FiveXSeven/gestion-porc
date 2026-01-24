@@ -249,27 +249,11 @@ const Dashboard = () => {
         </div>
 
         {/* Main content */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          {/* Chart */}
-          <div className="xl:col-span-2 bg-card rounded-lg border border-border p-4 animate-slide-up">
-            <h2 className="font-display text-base font-semibold text-foreground mb-4">
-              Évolution financière
-            </h2>
-            <RevenueChart ventes={ventes} depenses={depenses} />
-          </div>
-
-          {/* Alerts */}
-          <div className="bg-card rounded-lg border border-border p-4 animate-slide-up" style={{ animationDelay: '0.1s' }}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-display text-base font-semibold text-foreground">
-                Alertes
-              </h2>
-              <span className="px-2 py-1 rounded text-xs font-semibold bg-destructive/10 text-destructive">
-                {alerts.filter(a => !a.read).length}
-              </span>
-            </div>
-            <AlertsList alerts={alerts} onMarkRead={handleMarkAlertRead} />
-          </div>
+        <div className="bg-card rounded-lg border border-border p-4 animate-slide-up">
+          <h2 className="font-display text-base font-semibold text-foreground mb-4">
+            Évolution financière
+          </h2>
+          <RevenueChart ventes={ventes} depenses={depenses} />
         </div>
 
         {/* Upcoming events */}

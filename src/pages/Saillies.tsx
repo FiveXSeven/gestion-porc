@@ -5,8 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
+import { ConstraintErrorDialog } from '@/components/ui/ConstraintErrorDialog';
 import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
+import { isConstraintError } from '@/lib/api';
 import { Saillie, Truie, Verrat } from '@/types';
 import { Plus, Heart, Calendar, Search, Edit2, Trash2, Check, X, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -49,6 +52,21 @@ const Saillies = () => {
   });
   const [search, setSearch] = useState('');
   const [editingSaillie, setEditingSaillie] = useState<Saillie | null>(null);
+  
+  // Delete dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [constraintErrorOpen, setConstraintErrorOpen] = useState(false);
+  
+  // Delete all dialog state
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
+  
+  // Fail dialog state
+  const [failDialogOpen, setFailDialogOpen] = useState(false);
+  const [failingId, setFailingId] = useState<string | null>(null);
+  const [isFailing, setIsFailing] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -85,8 +103,8 @@ const Saillies = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.truieId || !formData.date) {
-      toast.error('Veuillez remplir tous les champs obligatoires');
+    if (!formData.truieId || !formData.date || !formData.verratId) {
+      toast.error('Veuillez remplir tous les champs obligatoires (Truie, Date et Verrat)');
       return;
     }
 
@@ -149,16 +167,71 @@ const Saillies = () => {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer cette saillie ?')) {
-      try {
-        await api.deleteSaillie(id);
-        loadData();
-        toast.success('Saillie supprimée');
-      } catch (error) {
-        console.error(error);
+  const openDeleteDialog = (id: string) => {
+    setDeletingId(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deletingId) return;
+    
+    setIsDeleting(true);
+    try {
+      await api.deleteSaillie(deletingId);
+      loadData();
+      toast.success('Saillie supprimée');
+      setDeleteDialogOpen(false);
+    } catch (error) {
+      setDeleteDialogOpen(false);
+      if (isConstraintError(error)) {
+        setConstraintErrorOpen(true);
+      } else {
         toast.error('Erreur lors de la suppression');
       }
+      console.error(error);
+    } finally {
+      setIsDeleting(false);
+      setDeletingId(null);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    setIsDeletingAll(true);
+    let hasConstraintError = false;
+    let deletedCount = 0;
+
+    try {
+      for (const saillie of saillies) {
+        try {
+          await api.deleteSaillie(saillie.id);
+          deletedCount++;
+        } catch (error) {
+          if (isConstraintError(error)) {
+            hasConstraintError = true;
+          } else {
+            throw error;
+          }
+        }
+      }
+
+      loadData();
+
+      if (hasConstraintError) {
+        if (deletedCount > 0) {
+          toast.warning(`${deletedCount} saillies supprimées, mais certaines n'ont pas pu l'être en raison de dépendances.`);
+        }
+        setDeleteAllDialogOpen(false);
+        setConstraintErrorOpen(true);
+      } else {
+        toast.success('Toutes les saillies ont été supprimées');
+        setDeleteAllDialogOpen(false);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+      setDeleteAllDialogOpen(false);
+    } finally {
+      setIsDeletingAll(false);
     }
   };
 
@@ -174,17 +247,28 @@ const Saillies = () => {
     }
   };
 
-  const handleFail = async (id: string) => {
-    if (confirm('Êtes-vous sûr de vouloir marquer cette saillie comme échouée ?')) {
-      try {
-        await api.failSaillie(id);
-        loadData();
-        refreshAlerts();
-        toast.success('Saillie marquée comme échouée');
-      } catch (error) {
-        console.error(error);
-        toast.error('Erreur lors de la mise à jour');
-      }
+  const openFailDialog = (id: string) => {
+    setFailingId(id);
+    setFailDialogOpen(true);
+  };
+
+  const handleFail = async () => {
+    if (!failingId) return;
+    
+    setIsFailing(true);
+    try {
+      await api.failSaillie(failingId);
+      loadData();
+      refreshAlerts();
+      toast.success('Saillie marquée comme échouée');
+      setFailDialogOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la mise à jour');
+      setFailDialogOpen(false);
+    } finally {
+      setIsFailing(false);
+      setFailingId(null);
     }
   };
 
@@ -210,16 +294,23 @@ const Saillies = () => {
             <h1 className="font-display text-3xl font-bold text-foreground">Saillies</h1>
             <p className="text-muted-foreground mt-1">Suivez les saillies et dates de mise bas prévues</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={(open) => {
-            setIsDialogOpen(open);
-            if (!open) resetForm();
-          }}>
-            <DialogTrigger asChild>
-              <Button className="gap-2" variant="accent">
-                <Plus className="h-5 w-5" />
-                Enregistrer une saillie
-              </Button>
-            </DialogTrigger>
+            <div className="flex flex-wrap gap-2">
+              {saillies.length > 0 && (
+                <Button variant="destructive" onClick={() => setDeleteAllDialogOpen(true)} className="gap-2">
+                  <Trash2 className="h-4 w-4" />
+                  Tout effacer
+                </Button>
+              )}
+              <Dialog open={isDialogOpen} onOpenChange={(open) => {
+                setIsDialogOpen(open);
+                if (!open) resetForm();
+              }}>
+                <DialogTrigger asChild>
+                  <Button className="gap-2" variant="accent">
+                    <Plus className="h-5 w-5" />
+                    Enregistrer une saillie
+                  </Button>
+                </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle className="font-display">
@@ -248,16 +339,15 @@ const Saillies = () => {
 
                 {/* Sélecteur de verrat */}
                 <div className="space-y-2">
-                  <Label htmlFor="verratId">Verrat (mâle)</Label>
+                  <Label htmlFor="verratId">Verrat (mâle) *</Label>
                   <Select
                     value={formData.verratId}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, verratId: value === 'none' ? '' : value }))}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, verratId: value }))}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Sélectionner un verrat (optionnel)" />
+                      <SelectValue placeholder="Sélectionner un verrat" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Aucun / Non spécifié</SelectItem>
                       {availableVerrats.map(verrat => (
                         <SelectItem key={verrat.id} value={verrat.id}>
                           🐗 {verrat.identification} - {raceLabels[verrat.race]}
@@ -266,7 +356,7 @@ const Saillies = () => {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Permet de tracer la génétique des porcelets
+                    Obligatoire pour la traçabilité génétique
                   </p>
                 </div>
 
@@ -327,6 +417,7 @@ const Saillies = () => {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Search */}
@@ -386,7 +477,7 @@ const Saillies = () => {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleDelete(saillie.id)}
+                        onClick={() => openDeleteDialog(saillie.id)}
                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -469,7 +560,7 @@ const Saillies = () => {
                         variant="destructive"
                         size="sm"
                         className="flex-1 gap-1"
-                        onClick={() => handleFail(saillie.id)}
+                        onClick={() => openFailDialog(saillie.id)}
                       >
                         <X className="h-4 w-4" />
                         Échouée
@@ -481,6 +572,42 @@ const Saillies = () => {
             })
           )}
         </div>
+        {/* Delete Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          onConfirm={handleDelete}
+          title="Supprimer cette saillie ?"
+          description="Êtes-vous sûr de vouloir supprimer cette saillie ? Cette action est irréversible."
+          isLoading={isDeleting}
+        />
+
+        {/* Fail Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={failDialogOpen}
+          onOpenChange={setFailDialogOpen}
+          onConfirm={handleFail}
+          title="Marquer comme échouée ?"
+          description="Êtes-vous sûr de vouloir marquer cette saillie comme échouée ? La truie reviendra en chaleur."
+          isLoading={isFailing}
+        />
+
+        {/* Constraint Error Dialog */}
+        <ConstraintErrorDialog
+          open={constraintErrorOpen}
+          onOpenChange={setConstraintErrorOpen}
+          itemType="saillie"
+        />
+
+        {/* Delete All Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteAllDialogOpen}
+          onOpenChange={setDeleteAllDialogOpen}
+          onConfirm={handleDeleteAll}
+          title="Supprimer toutes les saillies ?"
+          description="Êtes-vous sûr de vouloir supprimer toutes les saillies ? Cette action est irréversible."
+          isLoading={isDeletingAll}
+        />
       </div>
     </MainLayout>
   );

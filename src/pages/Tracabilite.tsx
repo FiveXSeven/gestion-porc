@@ -5,14 +5,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
 import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
+import { isConstraintError } from '@/lib/api';
 import { Mouvement } from '@/types';
-import { Plus, FileText, ArrowUpCircle, ArrowDownCircle, Filter, Search, Info, Eye } from 'lucide-react';
+import { Plus, FileText, ArrowUpCircle, ArrowDownCircle, Filter, Search, Info, Eye, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { ConstraintErrorDialog } from '@/components/ui/ConstraintErrorDialog';
 import { Truie, Verrat, Saillie, Portee, MiseBas, Vente, LotPostSevrage, LotEngraissement } from '@/types';
 
 const typeAnimalLabels: Record<string, string> = {
@@ -77,6 +80,16 @@ const Tracabilite = () => {
   const [lotsENG, setLotsENG] = useState<LotEngraissement[]>([]);
   const [selectedMouvement, setSelectedMouvement] = useState<Mouvement | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+
+  // Delete dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [constraintErrorOpen, setConstraintErrorOpen] = useState(false);
+  
+  // Delete all dialog state
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -180,16 +193,71 @@ const Tracabilite = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer ce mouvement ?')) {
-      try {
-        await api.deleteMouvement(id);
-        loadData();
-        toast.success('Mouvement supprimé');
-      } catch (error) {
-        console.error(error);
+  const openDeleteDialog = (id: string) => {
+    setDeletingId(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deletingId) return;
+
+    setIsDeleting(true);
+    try {
+      await api.deleteMouvement(deletingId);
+      loadData();
+      toast.success('Mouvement supprimé');
+      setDeleteDialogOpen(false);
+    } catch (error) {
+      setDeleteDialogOpen(false);
+      if (isConstraintError(error)) {
+        setConstraintErrorOpen(true);
+      } else {
         toast.error('Erreur lors de la suppression');
       }
+      console.error(error);
+    } finally {
+      setIsDeleting(false);
+      setDeletingId(null);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    setIsDeletingAll(true);
+    let hasConstraintError = false;
+    let deletedCount = 0;
+
+    try {
+      for (const mvmt of mouvements) {
+        try {
+          await api.deleteMouvement(mvmt.id);
+          deletedCount++;
+        } catch (error) {
+          if (isConstraintError(error)) {
+            hasConstraintError = true;
+          } else {
+            throw error;
+          }
+        }
+      }
+
+      loadData();
+
+      if (hasConstraintError) {
+        if (deletedCount > 0) {
+          toast.warning(`${deletedCount} mouvements supprimés, mais certains n'ont pas pu l'être en raison de dépendances.`);
+        }
+        setDeleteAllDialogOpen(false);
+        setConstraintErrorOpen(true);
+      } else {
+        toast.success('Tous les mouvements ont été supprimés');
+        setDeleteAllDialogOpen(false);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+      setDeleteAllDialogOpen(false);
+    } finally {
+      setIsDeletingAll(false);
     }
   };
 
@@ -230,6 +298,26 @@ const Tracabilite = () => {
     return ['vente', 'mortalite', 'reforme', 'transfert'];
   };
 
+  const calculateAge = (dateNaissance?: string): string => {
+    if (!dateNaissance) return '-';
+    const birth = new Date(dateNaissance);
+    const now = new Date();
+    
+    let years = now.getFullYear() - birth.getFullYear();
+    let months = now.getMonth() - birth.getMonth();
+    
+    if (months < 0 || (months === 0 && now.getDate() < birth.getDate())) {
+      years--;
+      months += 12;
+    }
+    
+    if (years > 0) {
+      if (months === 0) return `${years} an${years > 1 ? 's' : ''}`;
+      return `${years} an${years > 1 ? 's' : ''} ${months}m`;
+    }
+    return `${months} mois`;
+  };
+
   return (
     <MainLayout>
       <div className="space-y-6">
@@ -239,16 +327,23 @@ const Tracabilite = () => {
             <h1 className="font-display text-3xl font-bold text-foreground">Traçabilité</h1>
             <p className="text-muted-foreground mt-1">Registre des mouvements d'animaux</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={(open) => {
-            setIsDialogOpen(open);
-            if (!open) resetForm();
-          }}>
-            <DialogTrigger asChild>
-              <Button className="gap-2" variant="default">
-                <Plus className="h-5 w-5" />
-                Nouveau mouvement
-              </Button>
-            </DialogTrigger>
+            <div className="flex flex-wrap gap-2">
+              {mouvements.length > 0 && (
+                <Button variant="destructive" onClick={() => setDeleteAllDialogOpen(true)} className="gap-2">
+                  <Trash2 className="h-4 w-4" />
+                  Tout effacer
+                </Button>
+              )}
+              <Dialog open={isDialogOpen} onOpenChange={(open) => {
+                setIsDialogOpen(open);
+                if (!open) resetForm();
+              }}>
+                <DialogTrigger asChild>
+                  <Button className="gap-2" variant="default">
+                    <Plus className="h-5 w-5" />
+                    Nouveau mouvement
+                  </Button>
+                </DialogTrigger>
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
                 <DialogTitle className="font-display">Enregistrer un mouvement</DialogTitle>
@@ -391,6 +486,7 @@ const Tracabilite = () => {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Stats summary */}
@@ -537,7 +633,7 @@ const Tracabilite = () => {
                             variant="ghost"
                             size="sm"
                             className="text-destructive hover:text-destructive"
-                            onClick={() => handleDelete(mouvement.id)}
+                            onClick={() => openDeleteDialog(mouvement.id)}
                           >
                             Supprimer
                           </Button>
@@ -574,6 +670,10 @@ const Tracabilite = () => {
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Identification</span>
                         <span className="font-bold">{animal.identification}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Âge actuel</span>
+                        <span className="font-bold text-primary">{calculateAge(animal.dateNaissance)}</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Race</span>
@@ -740,6 +840,32 @@ const Tracabilite = () => {
           })()}
         </DialogContent>
       </Dialog>
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDeleteDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={handleDelete}
+        title="Supprimer ce mouvement ?"
+        description="Êtes-vous sûr de vouloir supprimer ce mouvement de traçabilité ? Cette action est irréversible."
+        isLoading={isDeleting}
+      />
+
+      {/* Delete All Confirmation Dialog */}
+      <ConfirmDeleteDialog
+        open={deleteAllDialogOpen}
+        onOpenChange={setDeleteAllDialogOpen}
+        onConfirm={handleDeleteAll}
+        title="Supprimer tous les mouvements ?"
+        description="Êtes-vous sûr de vouloir supprimer tous les mouvements de traçabilité ? Cette action est irréversible."
+        isLoading={isDeletingAll}
+      />
+
+      {/* Constraint Error Dialog */}
+      <ConstraintErrorDialog
+        open={constraintErrorOpen}
+        onOpenChange={setConstraintErrorOpen}
+        itemType="mouvement"
+      />
     </MainLayout>
   );
 };

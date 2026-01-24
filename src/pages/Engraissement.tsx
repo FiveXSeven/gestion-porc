@@ -5,8 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
+import { ConstraintErrorDialog } from '@/components/ui/ConstraintErrorDialog';
 import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
+import { isConstraintError } from '@/lib/api';
 import { LotEngraissement, Pesee, Mortalite } from '@/types';
 import { Plus, Scale, TrendingUp, Calendar, Target, Eye, Search, Edit2, Trash2, CheckCircle, Skull } from 'lucide-react';
 import { toast } from 'sonner';
@@ -68,6 +71,21 @@ const Engraissement = () => {
     cause: 'maladie' as Mortalite['cause'],
     notes: '',
   });
+
+  // Delete dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [constraintErrorOpen, setConstraintErrorOpen] = useState(false);
+
+  // Delete all dialog state
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
+
+  // Terminate dialog state
+  const [terminateDialogOpen, setTerminateDialogOpen] = useState(false);
+  const [terminatingLot, setTerminatingLot] = useState<LotEngraissement | null>(null);
+  const [isTerminating, setIsTerminating] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -215,41 +233,107 @@ const Engraissement = () => {
     setIsLotDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer ce lot ?')) {
-      try {
-        await api.deleteLotEngraissement(id);
-        loadData();
-        toast.success('Lot supprimé');
-      } catch (error) {
-        console.error(error);
+  const openDeleteDialog = (id: string) => {
+    setDeletingId(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deletingId) return;
+
+    setIsDeleting(true);
+    try {
+      await api.deleteLotEngraissement(deletingId);
+      loadData();
+      toast.success('Lot supprimé');
+      setDeleteDialogOpen(false);
+    } catch (error) {
+      setDeleteDialogOpen(false);
+      if (isConstraintError(error)) {
+        setConstraintErrorOpen(true);
+      } else {
         toast.error('Erreur lors de la suppression');
       }
+      console.error(error);
+    } finally {
+      setIsDeleting(false);
+      setDeletingId(null);
     }
   };
 
-  const handleMarkTermine = async (lot: LotEngraissement) => {
-    if (confirm(`Confirmer que le lot ${lot.identification} est terminé ?`)) {
-      try {
-        await api.updateLotEngraissement(lot.id, { statut: 'termine' });
-        
-        // Create alert for termination
-        await api.addAlert({
-          id: '',
-          type: 'vente',
-          message: `Lot d'engraissement ${lot.identification} terminé: ${lot.nombreActuel} porcs`,
-          date: new Date().toISOString(),
-          read: false,
-          relatedId: lot.id,
-        });
-        
-        loadData();
-        refreshAlerts();
-        toast.success('Lot marqué comme terminé');
-      } catch (error) {
-        console.error(error);
-        toast.error('Erreur lors de la mise à jour');
+  const handleDeleteAll = async () => {
+    setIsDeletingAll(true);
+    let hasConstraintError = false;
+    let deletedCount = 0;
+
+    try {
+      for (const lot of lots) {
+        try {
+          await api.deleteLotEngraissement(lot.id);
+          deletedCount++;
+        } catch (error) {
+          if (isConstraintError(error)) {
+            hasConstraintError = true;
+          } else {
+            throw error;
+          }
+        }
       }
+
+      loadData();
+
+      if (hasConstraintError) {
+        if (deletedCount > 0) {
+          toast.warning(`${deletedCount} lots supprimés, mais certains n'ont pas pu l'être en raison de dépendances.`);
+        }
+        setDeleteAllDialogOpen(false);
+        setConstraintErrorOpen(true);
+      } else {
+        toast.success("Tous les lots d'engraissement ont été supprimés");
+        setDeleteAllDialogOpen(false);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+      setDeleteAllDialogOpen(false);
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
+
+  const openTerminateDialog = (lot: LotEngraissement) => {
+    setTerminatingLot(lot);
+    setTerminateDialogOpen(true);
+  };
+
+  const handleMarkTermine = async () => {
+    if (!terminatingLot) return;
+
+    setIsTerminating(true);
+    try {
+      await api.updateLotEngraissement(terminatingLot.id, { statut: 'termine' });
+      
+      // Create alert for termination
+      await api.addAlert({
+        id: '',
+        type: 'vente',
+        message: `Lot d'engraissement ${terminatingLot.identification} terminé: ${terminatingLot.nombreActuel} porcs`,
+        date: new Date().toISOString(),
+        read: false,
+        relatedId: terminatingLot.id,
+      });
+      
+      loadData();
+      refreshAlerts();
+      toast.success('Lot marqué comme terminé');
+      setTerminateDialogOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la mise à jour');
+      setTerminateDialogOpen(false);
+    } finally {
+      setIsTerminating(false);
+      setTerminatingLot(null);
     }
   };
 
@@ -453,16 +537,23 @@ const Engraissement = () => {
             <h1 className="font-display text-3xl font-bold text-foreground">Engraissement</h1>
             <p className="text-muted-foreground mt-1">Suivez vos lots de porcs en engraissement</p>
           </div>
-          <Dialog open={isLotDialogOpen} onOpenChange={(open) => {
-            setIsLotDialogOpen(open);
-            if (!open) resetLotForm();
-          }}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="h-5 w-5" />
-                Nouveau lot
-              </Button>
-            </DialogTrigger>
+            <div className="flex flex-wrap gap-2">
+              {lots.length > 0 && (
+                <Button variant="destructive" onClick={() => setDeleteAllDialogOpen(true)} className="gap-2">
+                  <Trash2 className="h-4 w-4" />
+                  Tout effacer
+                </Button>
+              )}
+              <Dialog open={isLotDialogOpen} onOpenChange={(open) => {
+                setIsLotDialogOpen(open);
+                if (!open) resetLotForm();
+              }}>
+                <DialogTrigger asChild>
+                  <Button className="gap-2">
+                    <Plus className="h-5 w-5" />
+                    Nouveau lot
+                  </Button>
+                </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle className="font-display">
@@ -558,6 +649,7 @@ const Engraissement = () => {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Stats */}
@@ -880,7 +972,7 @@ const Engraissement = () => {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleDelete(lot.id)}
+                        onClick={() => openDeleteDialog(lot.id)}
                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -934,6 +1026,23 @@ const Engraissement = () => {
                     <div className="flex items-center gap-2 text-success mb-4 p-3 rounded-xl bg-success/10">
                       <Target className="h-4 w-4" />
                       <span className="text-sm font-medium">Poids cible atteint !</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex-1 gap-1 text-success hover:text-success"
+                        onClick={() => openTerminateDialog(lot)}
+                      >
+                        <CheckCircle className="h-4 w-4" />
+                        Terminer
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive hover:text-destructive ml-auto"
+                        onClick={() => openDeleteDialog(lot.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   )}
 
@@ -978,7 +1087,7 @@ const Engraissement = () => {
                       variant="success"
                       size="sm"
                       className="w-full mt-2 gap-1"
-                      onClick={() => handleMarkTermine(lot)}
+                      onClick={() => openTerminateDialog(lot)}
                     >
                       <CheckCircle className="h-4 w-4" />
                       Confirmer Terminé
@@ -992,6 +1101,32 @@ const Engraissement = () => {
           )}
         </div>
       </div>
+        {/* Delete Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          onConfirm={handleDelete}
+          title="Supprimer ce lot ?"
+          description="Êtes-vous sûr de vouloir supprimer ce lot ? Cette action est irréversible."
+          isLoading={isDeleting}
+        />
+
+        {/* Delete All Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteAllDialogOpen}
+          onOpenChange={setDeleteAllDialogOpen}
+          onConfirm={handleDeleteAll}
+          title="Supprimer tous les lots ?"
+          description="Êtes-vous sûr de vouloir supprimer tous les lots d'engraissement ? Cette action est irréversible."
+          isLoading={isDeletingAll}
+        />
+
+        {/* Constraint Error Dialog */}
+        <ConstraintErrorDialog
+          open={constraintErrorOpen}
+          onOpenChange={setConstraintErrorOpen}
+          itemType="lot"
+        />
     </MainLayout>
   );
 };

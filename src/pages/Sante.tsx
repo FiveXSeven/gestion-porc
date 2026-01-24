@@ -5,8 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
 import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
+import { isConstraintError } from '@/lib/api';
 import { Vaccination, Traitement, LotEngraissement, LotPostSevrage, Truie } from '@/types';
 import { Syringe, Pill, Plus, Calendar, Trash2, FileText } from 'lucide-react';
 import { toast } from 'sonner';
@@ -52,6 +54,21 @@ const Sante = () => {
     truieId: '',
     notes: '',
   });
+  
+  // Delete dialog states
+  const [deleteVaccinDialogOpen, setDeleteVaccinDialogOpen] = useState(false);
+  const [deletingVaccinId, setDeletingVaccinId] = useState<string | null>(null);
+  const [isDeletingVaccin, setIsDeletingVaccin] = useState(false);
+  
+  const [deleteTraitDialogOpen, setDeleteTraitDialogOpen] = useState(false);
+  const [deletingTraitId, setDeletingTraitId] = useState<string | null>(null);
+  const [isDeletingTrait, setIsDeletingTrait] = useState(false);
+
+  // Delete all dialog states
+  const [deleteAllVaccinDialogOpen, setDeleteAllVaccinDialogOpen] = useState(false);
+  const [isDeletingAllVaccins, setIsDeletingAllVaccins] = useState(false);
+  const [deleteAllTraitDialogOpen, setDeleteAllTraitDialogOpen] = useState(false);
+  const [isDeletingAllTraits, setIsDeletingAllTraits] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -153,29 +170,131 @@ const Sante = () => {
     }
   };
 
-  const handleDeleteVaccin = async (id: string) => {
-    if (confirm('Supprimer cette vaccination ?')) {
-      try {
-        await api.deleteVaccination(id);
-        loadData();
-        toast.success('Vaccination supprimée');
-      } catch (error) {
-        console.error(error);
-        toast.error('Erreur lors de la suppression');
-      }
+  const openDeleteVaccinDialog = (id: string) => {
+    setDeletingVaccinId(id);
+    setDeleteVaccinDialogOpen(true);
+  };
+
+  const handleDeleteVaccin = async () => {
+    if (!deletingVaccinId) return;
+    
+    setIsDeletingVaccin(true);
+    try {
+      await api.deleteVaccination(deletingVaccinId);
+      loadData();
+      toast.success('Vaccination supprimée');
+      setDeleteVaccinDialogOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+      setDeleteVaccinDialogOpen(false);
+    } finally {
+      setIsDeletingVaccin(false);
+      setDeletingVaccinId(null);
     }
   };
 
-  const handleDeleteTraitement = async (id: string) => {
-    if (confirm('Supprimer ce traitement ?')) {
-      try {
-        await api.deleteTraitement(id);
-        loadData();
-        toast.success('Traitement supprimé');
-      } catch (error) {
-        console.error(error);
-        toast.error('Erreur lors de la suppression');
+  const handleDeleteAllVaccins = async () => {
+    setIsDeletingAllVaccins(true);
+    let hasConstraintError = false;
+    let deletedCount = 0;
+
+    try {
+      for (const v of vaccinations) {
+        try {
+          await api.deleteVaccination(v.id);
+          deletedCount++;
+        } catch (error) {
+          if (isConstraintError(error)) {
+            hasConstraintError = true;
+          } else {
+            throw error;
+          }
+        }
       }
+
+      loadData();
+
+      if (hasConstraintError) {
+        if (deletedCount > 0) {
+          toast.warning(`${deletedCount} vaccinations supprimées, mais certaines n'ont pas pu l'être en raison de dépendances.`);
+        }
+        setDeleteAllVaccinDialogOpen(false);
+        // Notes: Sante.tsx doesn't seem to have ConstraintErrorDialog used in manual delete,
+        // but it's good practice to at least show the warning toast.
+      } else {
+        toast.success('Toutes les vaccinations ont été supprimées');
+        setDeleteAllVaccinDialogOpen(false);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+      setDeleteAllVaccinDialogOpen(false);
+    } finally {
+      setIsDeletingAllVaccins(false);
+    }
+  };
+
+  const openDeleteTraitDialog = (id: string) => {
+    setDeletingTraitId(id);
+    setDeleteTraitDialogOpen(true);
+  };
+
+  const handleDeleteTraitement = async () => {
+    if (!deletingTraitId) return;
+    
+    setIsDeletingTrait(true);
+    try {
+      await api.deleteTraitement(deletingTraitId);
+      loadData();
+      toast.success('Traitement supprimé');
+      setDeleteTraitDialogOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+      setDeleteTraitDialogOpen(false);
+    } finally {
+      setIsDeletingTrait(false);
+      setDeletingTraitId(null);
+    }
+  };
+
+  const handleDeleteAllTraits = async () => {
+    setIsDeletingAllTraits(true);
+    let hasConstraintError = false;
+    let deletedCount = 0;
+
+    try {
+      for (const t of traitements) {
+        try {
+          await api.deleteTraitement(t.id);
+          deletedCount++;
+        } catch (error) {
+          if (isConstraintError(error)) {
+            hasConstraintError = true;
+          } else {
+            throw error;
+          }
+        }
+      }
+
+      loadData();
+
+      if (hasConstraintError) {
+        if (deletedCount > 0) {
+          toast.warning(`${deletedCount} traitements supprimés, mais certains n'ont pas pu l'être en raison de dépendances.`);
+        }
+        setDeleteAllTraitDialogOpen(false);
+      } else {
+        toast.success('Tous les traitements ont été supprimés');
+        setDeleteAllTraitDialogOpen(false);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+      setDeleteAllTraitDialogOpen(false);
+    } finally {
+      setIsDeletingAllTraits(false);
     }
   };
 
@@ -204,7 +323,19 @@ const Sante = () => {
             <h1 className="font-display text-3xl font-bold text-foreground">Santé</h1>
             <p className="text-muted-foreground mt-1">Gérez les vaccinations et traitements</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {activeTab === 'vaccinations' && vaccinations.length > 0 && (
+              <Button variant="destructive" onClick={() => setDeleteAllVaccinDialogOpen(true)} className="gap-2">
+                <Trash2 className="h-4 w-4" />
+                Tout effacer
+              </Button>
+            )}
+            {activeTab === 'traitements' && traitements.length > 0 && (
+              <Button variant="destructive" onClick={() => setDeleteAllTraitDialogOpen(true)} className="gap-2">
+                <Trash2 className="h-4 w-4" />
+                Tout effacer
+              </Button>
+            )}
             <Dialog open={isVaccinDialogOpen} onOpenChange={setIsVaccinDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="gap-2">
@@ -473,7 +604,7 @@ const Sante = () => {
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => handleDeleteVaccin(v.id)}
+                    onClick={() => openDeleteVaccinDialog(v.id)}
                     className="text-muted-foreground hover:text-destructive"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -514,7 +645,7 @@ const Sante = () => {
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => handleDeleteTraitement(t.id)}
+                    onClick={() => openDeleteTraitDialog(t.id)}
                     className="text-muted-foreground hover:text-destructive"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -524,6 +655,45 @@ const Sante = () => {
             )
           )}
         </div>
+        {/* Delete Vaccination Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteVaccinDialogOpen}
+          onOpenChange={setDeleteVaccinDialogOpen}
+          onConfirm={handleDeleteVaccin}
+          title="Supprimer cette vaccination ?"
+          description="Êtes-vous sûr de vouloir supprimer cette vaccination ? Cette action est irréversible."
+          isLoading={isDeletingVaccin}
+        />
+
+        {/* Delete Traitement Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteTraitDialogOpen}
+          onOpenChange={setDeleteTraitDialogOpen}
+          onConfirm={handleDeleteTraitement}
+          title="Supprimer ce traitement ?"
+          description="Êtes-vous sûr de vouloir supprimer ce traitement ? Cette action est irréversible."
+          isLoading={isDeletingTrait}
+        />
+
+        {/* Delete All Vaccinations Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteAllVaccinDialogOpen}
+          onOpenChange={setDeleteAllVaccinDialogOpen}
+          onConfirm={handleDeleteAllVaccins}
+          title="Supprimer toutes les vaccinations ?"
+          description="Êtes-vous sûr de vouloir supprimer toutes les vaccinations ? Cette action est irréversible."
+          isLoading={isDeletingAllVaccins}
+        />
+
+        {/* Delete All Traitements Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteAllTraitDialogOpen}
+          onOpenChange={setDeleteAllTraitDialogOpen}
+          onConfirm={handleDeleteAllTraits}
+          title="Supprimer tous les traitements ?"
+          description="Êtes-vous sûr de vouloir supprimer tous les traitements ? Cette action est irréversible."
+          isLoading={isDeletingAllTraits}
+        />
       </div>
     </MainLayout>
   );

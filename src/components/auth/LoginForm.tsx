@@ -35,12 +35,12 @@ export const LoginForm = ({ onToggleMode }: LoginFormProps) => {
     // Simulate network delay
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    const success = login(email, pin);
+    const success = await login(email, pin);
     
     if (success) {
       toast.success('Connexion réussie !');
     } else {
-      toast.error('Email ou code PIN incorrect');
+      // toast.error is already handled inside AuthContext or here if needed
     }
     
     setIsLoading(false);

@@ -5,8 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
+import { ConstraintErrorDialog } from '@/components/ui/ConstraintErrorDialog';
 import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
+import { isConstraintError } from '@/lib/api';
 import { LotPostSevrage, Pesee, LotEngraissement, Mortalite } from '@/types';
 import { Plus, Scale, TrendingUp, Calendar, Target, Eye, Search, Edit2, Trash2, ArrowRight, CheckCircle, Skull } from 'lucide-react';
 import { toast } from 'sonner';
@@ -81,6 +84,21 @@ const PostSevrage = () => {
     cause: 'maladie' as Mortalite['cause'],
     notes: '',
   });
+
+  // Delete dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [constraintErrorOpen, setConstraintErrorOpen] = useState(false);
+
+  // Delete all dialog state
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
+
+  // Terminate dialog state
+  const [terminateDialogOpen, setTerminateDialogOpen] = useState(false);
+  const [terminatingLot, setTerminatingLot] = useState<LotPostSevrage | null>(null);
+  const [isTerminating, setIsTerminating] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -222,41 +240,107 @@ const PostSevrage = () => {
     setIsLotDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer ce lot ?')) {
-      try {
-        await api.deleteLotPostSevrage(id);
-        loadData();
-        toast.success('Lot supprimé');
-      } catch (error) {
-        console.error(error);
+  const openDeleteDialog = (id: string) => {
+    setDeletingId(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deletingId) return;
+
+    setIsDeleting(true);
+    try {
+      await api.deleteLotPostSevrage(deletingId);
+      loadData();
+      toast.success('Lot supprimé');
+      setDeleteDialogOpen(false);
+    } catch (error) {
+      setDeleteDialogOpen(false);
+      if (isConstraintError(error)) {
+        setConstraintErrorOpen(true);
+      } else {
         toast.error('Erreur lors de la suppression');
       }
+      console.error(error);
+    } finally {
+      setIsDeleting(false);
+      setDeletingId(null);
     }
   };
 
-  const handleMarkTermine = async (lot: LotPostSevrage) => {
-    if (confirm(`Marquer le lot ${lot.identification} comme terminé (sans transfert) ?`)) {
-      try {
-        await api.updateLotPostSevrage(lot.id, { statut: 'termine' });
-        
-        // Create alert for termination
-        await api.addAlert({
-          id: '',
-          type: 'vente',
-          message: `Lot ${lot.identification} terminé: ${lot.nombreActuel} animaux`,
-          date: new Date().toISOString(),
-          read: false,
-          relatedId: lot.id,
-        });
-        
-        loadData();
-        refreshAlerts();
-        toast.success('Lot marqué comme terminé');
-      } catch (error) {
-        console.error(error);
-        toast.error('Erreur lors de la mise à jour');
+  const handleDeleteAll = async () => {
+    setIsDeletingAll(true);
+    let hasConstraintError = false;
+    let deletedCount = 0;
+
+    try {
+      for (const lot of lots) {
+        try {
+          await api.deleteLotPostSevrage(lot.id);
+          deletedCount++;
+        } catch (error) {
+          if (isConstraintError(error)) {
+            hasConstraintError = true;
+          } else {
+            throw error;
+          }
+        }
       }
+
+      loadData();
+
+      if (hasConstraintError) {
+        if (deletedCount > 0) {
+          toast.warning(`${deletedCount} lots supprimés, mais certains n'ont pas pu l'être en raison de dépendances.`);
+        }
+        setDeleteAllDialogOpen(false);
+        setConstraintErrorOpen(true);
+      } else {
+        toast.success('Tous les lots ont été supprimés');
+        setDeleteAllDialogOpen(false);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+      setDeleteAllDialogOpen(false);
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
+
+  const openTerminateDialog = (lot: LotPostSevrage) => {
+    setTerminatingLot(lot);
+    setTerminateDialogOpen(true);
+  };
+
+  const handleMarkTermine = async () => {
+    if (!terminatingLot) return;
+
+    setIsTerminating(true);
+    try {
+      await api.updateLotPostSevrage(terminatingLot.id, { statut: 'termine' });
+      
+      // Create alert for termination
+      await api.addAlert({
+        id: '',
+        type: 'vente',
+        message: `Lot ${terminatingLot.identification} terminé: ${terminatingLot.nombreActuel} animaux`,
+        date: new Date().toISOString(),
+        read: false,
+        relatedId: terminatingLot.id,
+      });
+      
+      loadData();
+      refreshAlerts();
+      toast.success('Lot marqué comme terminé');
+      setTerminateDialogOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la mise à jour');
+      setTerminateDialogOpen(false);
+    } finally {
+      setIsTerminating(false);
+      setTerminatingLot(null);
     }
   };
 
@@ -603,16 +687,23 @@ const PostSevrage = () => {
             <h1 className="font-display text-3xl font-bold text-foreground">Post-Sevrage</h1>
             <p className="text-muted-foreground mt-1">Gérez vos lots de porcelets sevrés</p>
           </div>
-          <Dialog open={isLotDialogOpen} onOpenChange={(open) => {
-            setIsLotDialogOpen(open);
-            if (!open) resetLotForm();
-          }}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="h-5 w-5" />
-                Nouveau lot
-              </Button>
-            </DialogTrigger>
+            <div className="flex flex-wrap gap-2">
+              {lots.length > 0 && (
+                <Button variant="destructive" onClick={() => setDeleteAllDialogOpen(true)} className="gap-2">
+                  <Trash2 className="h-4 w-4" />
+                  Tout effacer
+                </Button>
+              )}
+              <Dialog open={isLotDialogOpen} onOpenChange={(open) => {
+                setIsLotDialogOpen(open);
+                if (!open) resetLotForm();
+              }}>
+                <DialogTrigger asChild>
+                  <Button className="gap-2">
+                    <Plus className="h-5 w-5" />
+                    Nouveau lot
+                  </Button>
+                </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle className="font-display">
@@ -708,6 +799,7 @@ const PostSevrage = () => {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Stats */}
@@ -1149,7 +1241,7 @@ const PostSevrage = () => {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleDelete(lot.id)}
+                        onClick={() => openDeleteDialog(lot.id)}
                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -1256,7 +1348,7 @@ const PostSevrage = () => {
                         variant="success"
                         size="sm"
                         className="flex-1 gap-1"
-                        onClick={() => handleMarkTermine(lot)}
+                        onClick={() => openTerminateDialog(lot)}
                       >
                         <CheckCircle className="h-4 w-4" />
                         Terminer
@@ -1268,6 +1360,43 @@ const PostSevrage = () => {
             })
           )}
         </div>
+
+        {/* Delete Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          onConfirm={handleDelete}
+          title="Supprimer ce lot ?"
+          description="Êtes-vous sûr de vouloir supprimer ce lot post-sevrage ? Cette action est irréversible."
+          isLoading={isDeleting}
+        />
+
+        {/* Terminate Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={terminateDialogOpen}
+          onOpenChange={setTerminateDialogOpen}
+          onConfirm={handleMarkTermine}
+          title="Terminer le lot ?"
+          description={`Êtes-vous sûr de vouloir marquer le lot ${terminatingLot?.identification} comme terminé ?`}
+          isLoading={isTerminating}
+        />
+
+        {/* Constraint Error Dialog */}
+        <ConstraintErrorDialog
+          open={constraintErrorOpen}
+          onOpenChange={setConstraintErrorOpen}
+          itemType="lot"
+        />
+
+        {/* Delete All Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteAllDialogOpen}
+          onOpenChange={setDeleteAllDialogOpen}
+          onConfirm={handleDeleteAll}
+          title="Supprimer tous les lots ?"
+          description="Êtes-vous sûr de vouloir supprimer tous les lots de post-sevrage ? Cette action est irréversible."
+          isLoading={isDeletingAll}
+        />
       </div>
     </MainLayout>
   );
