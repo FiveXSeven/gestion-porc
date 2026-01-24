@@ -28,7 +28,8 @@ const port = process.env.PORT || 3000;
 
 // Configuration CORS
 app.use(cors({
-    origin: '*', // Temporairement permissif pour le debug
+    origin: process.env.FRONTEND_URL || 'http://localhost:8081',
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
