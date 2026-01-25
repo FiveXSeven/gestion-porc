@@ -1,15 +1,53 @@
 {
-  "name": "vite_react_shadcn_ts",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "name": "gestion-porc",
+  "productName": "Gestion Porc",
+  "version": "1.0.0",
+  "description": "Application complète de gestion de porcherie",
+  "main": "main.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest"
+    "test": "vitest",
+    "build-app": "./build.sh",
+    "dist": "npm run build-app && electron-builder",
+    "dist:win": "npm run build-app && electron-builder --win",
+    "dist:mac": "npm run build-app && electron-builder --mac",
+    "dist:linux": "npm run build-app && electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.gestionporc.app",
+    "productName": "Gestion Porc",
+    "directories": {
+      "output": "release",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "dist/**/*",
+      "backend/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.png"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.png"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/icon.png"
+    }
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -81,12 +119,15 @@
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react-swc": "^3.11.0",
     "autoprefixer": "^10.4.21",
+    "electron": "^40.0.0",
+    "electron-builder": "^26.4.0",
     "eslint": "^9.32.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
     "jsdom": "^27.3.0",
     "lovable-tagger": "^1.1.11",
+    "pkg": "^5.8.1",
     "postcss": "^8.5.6",
     "prisma": "^7.1.0",
     "tailwindcss": "^3.4.17",
@@ -95,17 +136,11 @@
     "vite": "^5.4.19",
     "vitest": "^4.0.16"
   },
-  "description": "**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID",
-  "main": "eslint.config.js",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/FiveXSeven/gestion-porc.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/FiveXSeven/gestion-porc/issues"
-  },
-  "homepage": "https://github.com/FiveXSeven/gestion-porc#readme"
+  "keywords": ["porcherie", "gestion", "elevage", "agriculture"],
+  "author": "Gestion Porc Team",
+  "license": "ISC"
 }
