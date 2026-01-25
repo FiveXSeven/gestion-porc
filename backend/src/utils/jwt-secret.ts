@@ -29,6 +29,7 @@ export function getOrGenerateJWTSecret(): string {
             envContent = `JWT_SECRET="${newSecret}"`;
         }
         fs.writeFileSync(ENV_FILE, envContent);
+        process.env.JWT_SECRET = newSecret;
         console.log('✓ JWT_SECRET généré et sauvegardé dans .env');
     } catch (error) {
         console.warn('⚠ Impossible de sauvegarder JWT_SECRET dans .env:', error);

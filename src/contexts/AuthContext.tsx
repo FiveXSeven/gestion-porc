@@ -51,8 +51,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       localStorage.setItem('userEmail', email);
       localStorage.setItem('authToken', token);
       return true;
-    } catch (error) {
-      toast.error('Email ou code PIN incorrect');
+    } catch (error: any) {
+      toast.error(error.message || 'Email ou code PIN incorrect');
       return false;
     }
   };
@@ -66,8 +66,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       localStorage.setItem('userEmail', email);
       localStorage.setItem('authToken', token);
       return true;
-    } catch (error) {
-      toast.error('Erreur lors de l\'inscription');
+    } catch (error: any) {
+      toast.error(error.message || 'Erreur lors de l\'inscription');
       return false;
     }
   };

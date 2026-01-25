@@ -1,7 +1,10 @@
 export interface User {
+  id?: string;
   email: string;
-  pin: string;
+  pin?: string;
   name: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Truie {
