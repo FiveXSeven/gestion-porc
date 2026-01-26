@@ -1127,6 +1127,16 @@ const Engraissement = () => {
           onOpenChange={setConstraintErrorOpen}
           itemType="lot"
         />
+
+        {/* Terminate Confirmation Dialog */}
+        <ConfirmDeleteDialog
+          open={terminateDialogOpen}
+          onOpenChange={setTerminateDialogOpen}
+          onConfirm={handleMarkTermine}
+          title="Terminer le lot ?"
+          description={`Êtes-vous sûr de vouloir marquer le lot ${terminatingLot?.identification} comme terminé ?`}
+          isLoading={isTerminating}
+        />
     </MainLayout>
   );
 };

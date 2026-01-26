@@ -94,8 +94,8 @@ export const AlertNotificationProvider = ({ children }: AlertNotificationProvide
     // Initial fetch
     refreshAlerts();
 
-    // Poll every 30 seconds for new alerts
-    const interval = setInterval(refreshAlerts, 30000);
+    // Poll every 60 seconds for new alerts (increased from 30s to reduce requests)
+    const interval = setInterval(refreshAlerts, 60000);
     
     return () => clearInterval(interval);
   }, [isAuthenticated, refreshAlerts]);

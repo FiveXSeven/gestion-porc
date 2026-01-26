@@ -8,7 +8,7 @@ const router = Router();
 // Rate limiting strict pour auth
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5, // 5 tentatives
+    max: 20, // augmenté de 5 à 20 tentatives
     message: { error: 'Trop de tentatives. Réessayez plus tard.' },
     standardHeaders: true,
     legacyHeaders: false,

@@ -388,7 +388,12 @@ const Sante = () => {
                     <Label htmlFor="vaccinLotType">Type de lot</Label>
                     <Select
                       value={vaccinFormData.lotType}
-                      onValueChange={(value) => setVaccinFormData(prev => ({ ...prev, lotType: value as Vaccination['lotType'] }))}
+                      onValueChange={(value) => setVaccinFormData(prev => ({ 
+                        ...prev, 
+                        lotType: value as Vaccination['lotType'],
+                        lotId: '',
+                        truieId: ''
+                      }))}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -400,6 +405,60 @@ const Sante = () => {
                       </SelectContent>
                     </Select>
                   </div>
+                  {vaccinFormData.lotType === 'engraissement' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="vaccinLotId">Lot d'engraissement *</Label>
+                      <Select
+                        value={vaccinFormData.lotId}
+                        onValueChange={(value) => setVaccinFormData(prev => ({ ...prev, lotId: value, truieId: '' }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sélectionner un lot" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {lots.map(l => (
+                            <SelectItem key={l.id} value={l.id}>{l.identification}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  {vaccinFormData.lotType === 'post-sevrage' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="vaccinLotIdPS">Lot Post-Sevrage *</Label>
+                      <Select
+                        value={vaccinFormData.lotId}
+                        onValueChange={(value) => setVaccinFormData(prev => ({ ...prev, lotId: value, truieId: '' }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sélectionner un lot" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {lotsPS.map(l => (
+                            <SelectItem key={l.id} value={l.id}>{l.identification}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  {vaccinFormData.lotType === 'truie' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="vaccinTruieId">Truie *</Label>
+                      <Select
+                        value={vaccinFormData.truieId}
+                        onValueChange={(value) => setVaccinFormData(prev => ({ ...prev, truieId: value, lotId: '' }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sélectionner une truie" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {truies.map(t => (
+                            <SelectItem key={t.id} value={t.id}>{t.identification}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label htmlFor="vaccinDateRappel">Date de rappel</Label>
                     <Input
@@ -485,7 +544,12 @@ const Sante = () => {
                     <Label htmlFor="traitLotType">Type de lot</Label>
                     <Select
                       value={traitementFormData.lotType}
-                      onValueChange={(value) => setTraitementFormData(prev => ({ ...prev, lotType: value as Traitement['lotType'] }))}
+                      onValueChange={(value) => setTraitementFormData(prev => ({ 
+                        ...prev, 
+                        lotType: value as Traitement['lotType'],
+                        lotId: '',
+                        truieId: ''
+                      }))}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -497,6 +561,60 @@ const Sante = () => {
                       </SelectContent>
                     </Select>
                   </div>
+                  {traitementFormData.lotType === 'engraissement' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="traitLotId">Lot d'engraissement *</Label>
+                      <Select
+                        value={traitementFormData.lotId}
+                        onValueChange={(value) => setTraitementFormData(prev => ({ ...prev, lotId: value, truieId: '' }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sélectionner un lot" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {lots.map(l => (
+                            <SelectItem key={l.id} value={l.id}>{l.identification}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  {traitementFormData.lotType === 'post-sevrage' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="traitLotIdPS">Lot Post-Sevrage *</Label>
+                      <Select
+                        value={traitementFormData.lotId}
+                        onValueChange={(value) => setTraitementFormData(prev => ({ ...prev, lotId: value, truieId: '' }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sélectionner un lot" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {lotsPS.map(l => (
+                            <SelectItem key={l.id} value={l.id}>{l.identification}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  {traitementFormData.lotType === 'truie' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="traitTruieId">Truie *</Label>
+                      <Select
+                        value={traitementFormData.truieId}
+                        onValueChange={(value) => setTraitementFormData(prev => ({ ...prev, truieId: value, lotId: '' }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sélectionner une truie" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {truies.map(t => (
+                            <SelectItem key={t.id} value={t.id}>{t.identification}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label htmlFor="traitNotes">Notes</Label>
                     <Input

@@ -39,7 +39,7 @@ app.use(express.json());
 // Rate Limiting pour prévenir les attaques brute-force
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // limite chaque IP à 100 requêtes par windowMs
+    max: 1000, // augmenté de 100 à 1000 pour éviter les blocages en usage normal
     message: { error: 'Trop de requêtes, veuillez réessayer plus tard.' }
 });
 app.use('/api/', limiter);

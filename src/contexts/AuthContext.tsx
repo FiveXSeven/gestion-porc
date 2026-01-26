@@ -29,11 +29,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           const userData = await api.getMe(storedEmail);
           setUser(userData);
           setAuthenticatedState(true);
-        } catch (error) {
+        } catch (error: any) {
           console.error('Session restore failed:', error);
-          localStorage.removeItem('isAuthenticated');
-          localStorage.removeItem('userEmail');
-          localStorage.removeItem('authToken');
+          // Only logout if it's a 401/403 (unauthorized/forbidden)
+          // If it's a 429 (Too many requests) or network error, we don't logout
+          if (error.message?.includes('401') || error.message?.includes('403') || error.status === 401 || error.status === 403) {
+            localStorage.removeItem('isAuthenticated');
+            localStorage.removeItem('userEmail');
+            localStorage.removeItem('authToken');
+          }
         }
       }
       setLoading(false);
