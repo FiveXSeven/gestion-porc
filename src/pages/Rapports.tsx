@@ -102,6 +102,7 @@ const Rapports = () => {
   const depensesFiltered = filterByDate(depenses);
   const sailliesFiltered = filterByDate(saillies);
   const mortalitesFiltered = filterByDate(mortalites);
+  const misesBasFiltered = filterByDate(misesBas);
   const vaccinationsFiltered = filterByDate(vaccinations);
   const traitementsFiltered = filterByDate(traitements);
   
@@ -122,7 +123,9 @@ const Rapports = () => {
   const lotsPSEnCours = lotsPS.filter(l => l.statut === 'en_cours');
   const totalAnimauxPS = lotsPSEnCours.reduce((sum, l) => sum + l.nombreActuel, 0);
 
-  const totalMortalite = mortalitesFiltered.reduce((sum, m) => sum + m.nombre, 0);
+  const totalMortNes = misesBasFiltered.reduce((sum, m) => sum + m.mortNes, 0);
+  const totalMortaliteLots = mortalitesFiltered.reduce((sum, m) => sum + m.nombre, 0);
+  const totalMortalite = totalMortaliteLots + totalMortNes;
 
   const handlePrint = () => {
     window.print();
@@ -249,7 +252,9 @@ const Rapports = () => {
                 <Skull className="h-8 w-8 mx-auto mb-2 text-destructive" />
                 <p className="text-2xl font-bold text-destructive">{totalMortalite}</p>
                 <p className="text-sm text-muted-foreground">Pertes</p>
-                <p className="text-xs text-muted-foreground">{mortalitesFiltered.length} déclarations</p>
+                <p className="text-xs text-muted-foreground">
+                  {totalMortNes} mort-nés / {totalMortaliteLots} décès
+                </p>
               </div>
               <div className="p-4 rounded-xl bg-info/10 print:bg-gray-100 border border-info/20 text-center">
                 <Activity className="h-8 w-8 mx-auto mb-2 text-info" />

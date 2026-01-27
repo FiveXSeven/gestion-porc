@@ -9,8 +9,8 @@ import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
 import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
 import { isConstraintError } from '@/lib/api';
-import { Vaccination, Traitement, LotEngraissement, LotPostSevrage, Truie } from '@/types';
-import { Syringe, Pill, Plus, Calendar, Trash2, FileText } from 'lucide-react';
+import { Vaccination, Traitement, LotEngraissement, LotPostSevrage, Truie, Mortalite } from '@/types';
+import { Syringe, Pill, Plus, Calendar, Trash2, FileText, Skull } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -26,10 +26,11 @@ const Sante = () => {
   const { refreshAlerts } = useAlertNotifications();
   const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
   const [traitements, setTraitements] = useState<Traitement[]>([]);
+  const [mortalites, setMortalites] = useState<Mortalite[]>([]);
   const [lots, setLots] = useState<LotEngraissement[]>([]);
   const [lotsPS, setLotsPS] = useState<LotPostSevrage[]>([]);
   const [truies, setTruies] = useState<Truie[]>([]);
-  const [activeTab, setActiveTab] = useState<'vaccinations' | 'traitements'>('vaccinations');
+  const [activeTab, setActiveTab] = useState<'vaccinations' | 'traitements' | 'mortalites'>('vaccinations');
   
   const [isVaccinDialogOpen, setIsVaccinDialogOpen] = useState(false);
   const [vaccinFormData, setVaccinFormData] = useState({
@@ -54,6 +55,16 @@ const Sante = () => {
     truieId: '',
     notes: '',
   });
+
+  const [isMortaliteDialogOpen, setIsMortaliteDialogOpen] = useState(false);
+  const [mortaliteFormData, setMortaliteFormData] = useState({
+    date: new Date().toISOString().split('T')[0],
+    nombre: '1',
+    cause: 'maladie' as Mortalite['cause'],
+    lotType: 'engraissement' as 'engraissement' | 'post-sevrage',
+    lotId: '',
+    notes: '',
+  });
   
   // Delete dialog states
   const [deleteVaccinDialogOpen, setDeleteVaccinDialogOpen] = useState(false);
@@ -69,6 +80,11 @@ const Sante = () => {
   const [isDeletingAllVaccins, setIsDeletingAllVaccins] = useState(false);
   const [deleteAllTraitDialogOpen, setDeleteAllTraitDialogOpen] = useState(false);
   const [isDeletingAllTraits, setIsDeletingAllTraits] = useState(false);
+  const [deleteMortaliteDialogOpen, setDeleteMortaliteDialogOpen] = useState(false);
+  const [deletingMortaliteId, setDeletingMortaliteId] = useState<string | null>(null);
+  const [isDeletingMortalite, setIsDeletingMortalite] = useState(false);
+  const [deleteAllMortaliteDialogOpen, setDeleteAllMortaliteDialogOpen] = useState(false);
+  const [isDeletingAllMortalites, setIsDeletingAllMortalites] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -76,15 +92,17 @@ const Sante = () => {
 
   const loadData = async () => {
     try {
-      const [vaccinData, traitementData, lotsData, lotsPSData, truiesData] = await Promise.all([
+      const [vaccinData, traitementData, mortaliteData, lotsData, lotsPSData, truiesData] = await Promise.all([
         api.getVaccinations(),
         api.getTraitements(),
+        api.getMortalites(),
         api.getLotsEngraissement(),
         api.getLotsPostSevrage(),
         api.getTruies(),
       ]);
       setVaccinations(vaccinData);
       setTraitements(traitementData);
+      setMortalites(mortaliteData);
       setLots(lotsData.filter(l => l.statut === 'en_cours'));
       setLotsPS(lotsPSData.filter(l => l.statut === 'en_cours'));
       setTruies(truiesData.filter(t => t.statut !== 'reformee' && t.statut !== 'vendue'));
@@ -167,6 +185,89 @@ const Sante = () => {
     } catch (error) {
       console.error(error);
       toast.error('Erreur lors de l\'enregistrement');
+    }
+  };
+
+  const handleMortaliteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mortaliteFormData.nombre || !mortaliteFormData.lotId) {
+      toast.error('Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+
+    try {
+      const nombre = parseInt(mortaliteFormData.nombre);
+      await api.addMortalite({
+        id: '',
+        date: mortaliteFormData.date,
+        nombre,
+        cause: mortaliteFormData.cause,
+        notes: mortaliteFormData.notes,
+        lotEngraissementId: mortaliteFormData.lotType === 'engraissement' ? mortaliteFormData.lotId : undefined,
+        lotPostSevrageId: mortaliteFormData.lotType === 'post-sevrage' ? mortaliteFormData.lotId : undefined,
+      });
+
+      // Also record movement
+      await api.addMouvement({
+        id: '',
+        date: mortaliteFormData.date,
+        typeMouvement: 'sortie',
+        typeAnimal: mortaliteFormData.lotType === 'engraissement' ? 'porc_engraissement' : 'porcelet',
+        motif: 'mortalite',
+        quantite: nombre,
+        identification: getLotName(mortaliteFormData.lotType, mortaliteFormData.lotId),
+        notes: `Mortalité centrale: ${mortaliteFormData.cause} - ${mortaliteFormData.notes}`,
+      });
+
+      toast.success('Mortalité enregistrée');
+      setIsMortaliteDialogOpen(false);
+      loadData();
+      refreshAlerts();
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de l\'enregistrement');
+    }
+  };
+
+  const openDeleteMortaliteDialog = (id: string) => {
+    setDeletingMortaliteId(id);
+    setDeleteMortaliteDialogOpen(true);
+  };
+
+  const handleDeleteMortalite = async () => {
+    if (!deletingMortaliteId) return;
+    setIsDeletingMortalite(true);
+    try {
+      await api.deleteMortalite(deletingMortaliteId);
+      loadData();
+      toast.success('Mortalité supprimée');
+      setDeleteMortaliteDialogOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+      setDeleteMortaliteDialogOpen(false);
+    } finally {
+      setIsDeletingMortalite(false);
+      setDeletingMortaliteId(null);
+    }
+  };
+
+  const handleDeleteAllMortalites = async () => {
+    setIsDeletingAllMortalites(true);
+    let deletedCount = 0;
+    try {
+      for (const m of mortalites) {
+        await api.deleteMortalite(m.id);
+        deletedCount++;
+      }
+      loadData();
+      toast.success('Toutes les mortalités ont été supprimées');
+      setDeleteAllMortaliteDialogOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors de la suppression');
+    } finally {
+      setIsDeletingAllMortalites(false);
     }
   };
 
@@ -336,6 +437,118 @@ const Sante = () => {
                 Tout effacer
               </Button>
             )}
+            {activeTab === 'mortalites' && mortalites.length > 0 && (
+              <Button variant="destructive" onClick={() => setDeleteAllMortaliteDialogOpen(true)} className="gap-2">
+                <Trash2 className="h-4 w-4" />
+                Tout effacer
+              </Button>
+            )}
+            <Dialog open={isMortaliteDialogOpen} onOpenChange={setIsMortaliteDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="destructive" className="gap-2">
+                  <Skull className="h-5 w-5" />
+                  Mortalité
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="font-display text-destructive">Enregistrer une mortalité</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleMortaliteSubmit} className="space-y-4 mt-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="mortDate">Date *</Label>
+                      <Input
+                        id="mortDate"
+                        type="date"
+                        value={mortaliteFormData.date}
+                        onChange={(e) => setMortaliteFormData(prev => ({ ...prev, date: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="mortNombre">Nombre *</Label>
+                      <Input
+                        id="mortNombre"
+                        type="number"
+                        min="1"
+                        value={mortaliteFormData.nombre}
+                        onChange={(e) => setMortaliteFormData(prev => ({ ...prev, nombre: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mortCause">Cause</Label>
+                    <Select
+                      value={mortaliteFormData.cause}
+                      onValueChange={(value) => setMortaliteFormData(prev => ({ ...prev, cause: value as Mortalite['cause'] }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="maladie">Maladie</SelectItem>
+                        <SelectItem value="accident">Accident</SelectItem>
+                        <SelectItem value="faiblesse">Faiblesse</SelectItem>
+                        <SelectItem value="autre">Autre</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mortLotType">Type de lot</Label>
+                    <Select
+                      value={mortaliteFormData.lotType}
+                      onValueChange={(value) => setMortaliteFormData(prev => ({ 
+                        ...prev, 
+                        lotType: value as 'engraissement' | 'post-sevrage',
+                        lotId: ''
+                      }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="engraissement">Engraissement</SelectItem>
+                        <SelectItem value="post-sevrage">Post-Sevrage</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mortLotId">Lot concerné *</Label>
+                    <Select
+                      value={mortaliteFormData.lotId}
+                      onValueChange={(value) => setMortaliteFormData(prev => ({ ...prev, lotId: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sélectionner un lot" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {mortaliteFormData.lotType === 'engraissement' 
+                          ? lots.map(l => <SelectItem key={l.id} value={l.id}>{l.identification}</SelectItem>)
+                          : lotsPS.map(l => <SelectItem key={l.id} value={l.id}>{l.identification}</SelectItem>)
+                        }
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mortNotes">Notes</Label>
+                    <Input
+                      id="mortNotes"
+                      placeholder="Notes..."
+                      value={mortaliteFormData.notes}
+                      onChange={(e) => setMortaliteFormData(prev => ({ ...prev, notes: e.target.value }))}
+                    />
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <Button type="button" variant="outline" onClick={() => setIsMortaliteDialogOpen(false)} className="flex-1">
+                      Annuler
+                    </Button>
+                    <Button type="submit" variant="destructive" className="flex-1">
+                      Enregistrer
+                    </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
             <Dialog open={isVaccinDialogOpen} onOpenChange={setIsVaccinDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="gap-2">
@@ -654,6 +867,13 @@ const Sante = () => {
             </div>
             <p className="text-3xl font-display font-bold text-foreground">{traitements.length}</p>
           </div>
+          <div className="bg-destructive/10 rounded-2xl border border-destructive/20 p-6">
+            <div className="flex items-center gap-3 mb-2">
+              <Skull className="h-6 w-6 text-destructive" />
+              <span className="text-sm font-medium text-muted-foreground">Mortalités</span>
+            </div>
+            <p className="text-3xl font-display font-bold text-foreground">{mortalites.length}</p>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -674,9 +894,16 @@ const Sante = () => {
             <Pill className="h-4 w-4" />
             Traitements
           </Button>
+          <Button
+            variant={activeTab === 'mortalites' ? 'destructive' : 'outline'}
+            onClick={() => setActiveTab('mortalites')}
+            className="gap-2"
+          >
+            <Skull className="h-4 w-4" />
+            Mortalités
+          </Button>
         </div>
 
-        {/* Content */}
         <div className="space-y-3 animate-slide-up">
           {activeTab === 'vaccinations' ? (
             vaccinations.length === 0 ? (
@@ -730,7 +957,7 @@ const Sante = () => {
                 </div>
               ))
             )
-          ) : (
+          ) : activeTab === 'traitements' ? (
             traitements.length === 0 ? (
               <div className="text-center py-16 bg-card rounded-2xl border border-border">
                 <Pill className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
@@ -771,8 +998,50 @@ const Sante = () => {
                 </div>
               ))
             )
+          ) : (
+            mortalites.length === 0 ? (
+              <div className="text-center py-16 bg-card rounded-2xl border border-border">
+                <Skull className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
+                <p className="text-muted-foreground">Aucune mortalité enregistrée</p>
+              </div>
+            ) : (
+              mortalites.map((m, index) => (
+                <div
+                  key={m.id}
+                  className="flex items-center gap-4 p-4 bg-card rounded-2xl border border-border shadow-card"
+                  style={{ animationDelay: `${index * 0.05}s` }}
+                >
+                  <div className="p-3 rounded-xl bg-destructive/10">
+                    <Skull className="h-5 w-5 text-destructive" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-foreground">{m.nombre} animal/aux décédé(s)</p>
+                    <p className="text-sm text-muted-foreground capitalize">
+                      Cause: {m.cause}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {format(new Date(m.date), "d MMM yyyy", { locale: fr })} • {getLotName(m.lotEngraissementId ? 'engraissement' : 'post-sevrage', m.lotEngraissementId || m.lotPostSevrageId)}
+                    </p>
+                    {m.notes && (
+                      <p className="text-xs text-muted-foreground mt-1 italic">
+                        Note: {m.notes}
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => openDeleteMortaliteDialog(m.id)}
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))
+            )
           )}
         </div>
+
         {/* Delete Vaccination Dialog */}
         <ConfirmDeleteDialog
           open={deleteVaccinDialogOpen}
@@ -793,13 +1062,23 @@ const Sante = () => {
           isLoading={isDeletingTrait}
         />
 
+        {/* Delete Mortalite Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteMortaliteDialogOpen}
+          onOpenChange={setDeleteMortaliteDialogOpen}
+          onConfirm={handleDeleteMortalite}
+          title="Supprimer cette mortalité ?"
+          description="Êtes-vous sûr de vouloir supprimer cet enregistrement de mortalité ?"
+          isLoading={isDeletingMortalite}
+        />
+
         {/* Delete All Vaccinations Dialog */}
         <ConfirmDeleteDialog
           open={deleteAllVaccinDialogOpen}
           onOpenChange={setDeleteAllVaccinDialogOpen}
           onConfirm={handleDeleteAllVaccins}
-          title="Supprimer toutes les vaccinations ?"
-          description="Êtes-vous sûr de vouloir supprimer toutes les vaccinations ? Cette action est irréversible."
+          title="Tout supprimer ?"
+          description="Voulez-vous supprimer toutes les vaccinations ?"
           isLoading={isDeletingAllVaccins}
         />
 
@@ -808,9 +1087,19 @@ const Sante = () => {
           open={deleteAllTraitDialogOpen}
           onOpenChange={setDeleteAllTraitDialogOpen}
           onConfirm={handleDeleteAllTraits}
-          title="Supprimer tous les traitements ?"
-          description="Êtes-vous sûr de vouloir supprimer tous les traitements ? Cette action est irréversible."
+          title="Tout supprimer ?"
+          description="Voulez-vous supprimer tous les traitements ?"
           isLoading={isDeletingAllTraits}
+        />
+
+        {/* Delete All Mortalites Dialog */}
+        <ConfirmDeleteDialog
+          open={deleteAllMortaliteDialogOpen}
+          onOpenChange={setDeleteAllMortaliteDialogOpen}
+          onConfirm={handleDeleteAllMortalites}
+          title="Tout supprimer ?"
+          description="Voulez-vous supprimer tous les enregistrements de mortalité ?"
+          isLoading={isDeletingAllMortalites}
         />
       </div>
     </MainLayout>
