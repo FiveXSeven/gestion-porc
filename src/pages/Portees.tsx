@@ -192,6 +192,23 @@ const Portees = () => {
           read: false
         });
 
+        // Automate traceability movement
+        try {
+          await api.addMouvement({
+            id: '',
+            date: formData.date,
+            typeMouvement: 'entree',
+            typeAnimal: 'porcelet',
+            motif: 'naissance',
+            quantite: parseInt(formData.nesVivants),
+            poids: parseFloat(formData.poidsMoyen) * parseInt(formData.nesVivants) || undefined,
+            identification: `NAISSANCE-${truie?.identification || 'UNK'}-${formData.date}`,
+            notes: `Naissance automatique: Truie ${truie?.identification}`,
+          });
+        } catch (mvtError) {
+          console.error('Erreur automation mouvement naissance:', mvtError);
+        }
+
         toast.success('Mise bas enregistrée avec succès');
       }
       loadData();

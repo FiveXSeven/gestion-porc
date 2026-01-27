@@ -9,8 +9,8 @@ import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
 import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
 import { isConstraintError } from '@/lib/api';
-import { Mouvement } from '@/types';
-import { Plus, FileText, ArrowUpCircle, ArrowDownCircle, Filter, Search, Info, Eye, Trash2 } from 'lucide-react';
+import { Mouvement, Vaccination, Traitement, ConsommationAliment, StockAliment } from '@/types';
+import { Plus, FileText, ArrowUpCircle, ArrowDownCircle, Filter, Search, Info, Eye, Trash2, Syringe, Pill, ShoppingBasket } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -78,6 +78,10 @@ const Tracabilite = () => {
   const [ventes, setVentes] = useState<Vente[]>([]);
   const [lotsPS, setLotsPS] = useState<LotPostSevrage[]>([]);
   const [lotsENG, setLotsENG] = useState<LotEngraissement[]>([]);
+  const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
+  const [traitements, setTraitements] = useState<Traitement[]>([]);
+  const [consommations, setConsommations] = useState<ConsommationAliment[]>([]);
+  const [stocks, setStocks] = useState<StockAliment[]>([]);
   const [selectedMouvement, setSelectedMouvement] = useState<Mouvement | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
@@ -107,7 +111,11 @@ const Tracabilite = () => {
         misesBasData, 
         ventesData,
         lotsPSData,
-        lotsENGData
+        lotsENGData,
+        vaccinationsData,
+        traitementsData,
+        consommationsData,
+        stocksData
       ] = await Promise.all([
         api.getMouvements(),
         api.getMouvementsStats(),
@@ -119,6 +127,10 @@ const Tracabilite = () => {
         api.getVentes(),
         api.getLotsPostSevrage(),
         api.getLotsEngraissement(),
+        api.getVaccinations(),
+        api.getTraitements(),
+        api.getConsommations(),
+        api.getStockAliments(),
       ]);
       setMouvements(mouvementsData);
       setStats(statsData);
@@ -130,6 +142,10 @@ const Tracabilite = () => {
       setVentes(ventesData);
       setLotsPS(lotsPSData);
       setLotsENG(lotsENGData);
+      setVaccinations(vaccinationsData);
+      setTraitements(traitementsData);
+      setConsommations(consommationsData);
+      setStocks(stocksData);
     } catch (error) {
       console.error(error);
       toast.error('Erreur lors du chargement des données');
@@ -788,6 +804,124 @@ const Tracabilite = () => {
                     </h3>
                   </div>
                 </div>
+
+                {/* Health & Feed Sections */}
+                {(() => {
+                  // Advanced matching logic for health/feed data
+                  let lotId: string | undefined = undefined;
+                  let animalId: string | undefined = undefined;
+
+                  // 1. Direct match by identification (Case-insensitive & Trimmed)
+                  const cleanIdent = mvmt.identification?.trim().toLowerCase();
+                  
+                  const directLot = lotsENG.find(l => l.identification.trim().toLowerCase() === cleanIdent) || 
+                                   lotsPS.find(l => l.identification.trim().toLowerCase() === cleanIdent);
+                  if (directLot) lotId = directLot.id;
+
+                  const directAnimal = truies.find(t => t.identification.trim().toLowerCase() === cleanIdent) ||
+                                      verrats.find(v => v.identification.trim().toLowerCase() === cleanIdent);
+                  if (directAnimal) animalId = directAnimal.id;
+
+                  // 2. Prefix handling for automated movements
+                  if (!animalId && !lotId && cleanIdent) {
+                    if (cleanIdent.startsWith('sevrage-')) {
+                      const truieIdent = cleanIdent.replace('sevrage-', '');
+                      const truie = truies.find(t => t.identification.trim().toLowerCase() === truieIdent);
+                      if (truie) animalId = truie.id;
+                    } else if (cleanIdent.startsWith('naissance-')) {
+                      // Format: NAISSANCE-truieIdent-date
+                      const parts = cleanIdent.split('-');
+                      if (parts.length >= 2) {
+                        const truieIdent = parts[1];
+                        const truie = truies.find(t => t.identification.trim().toLowerCase() === truieIdent);
+                        if (truie) animalId = truie.id;
+                      }
+                    }
+                  }
+
+                  // 3. Fallback to portee check (if we found a lot but it might be linked to a truie's health)
+                  if (lotId && !animalId) {
+                    const lot = lotsENG.find(l => l.id === lotId) || lotsPS.find(l => l.id === lotId);
+                    if (lot?.porteeId) {
+                      const portee = portees.find(p => p.id === lot.porteeId);
+                      if (portee) animalId = portee.truieId;
+                    }
+                  }
+
+                  const relevantVaccins = vaccinations.filter(v => 
+                    (lotId && v.lotId === lotId) || 
+                    (animalId && (v.truieId === animalId || v.verratId === animalId))
+                  ).slice(0, 5);
+
+                  const relevantTraits = traitements.filter(t => 
+                    (lotId && t.lotId === lotId) || 
+                    (animalId && (t.truieId === animalId || t.verratId === animalId))
+                  ).slice(0, 5);
+
+                  const relevantConsom = consommations.filter(c => 
+                    lotId && (c.lotEngraissementId === lotId || c.lotPostSevrageId === lotId)
+                  ).slice(0, 5);
+
+                  if (relevantVaccins.length === 0 && relevantTraits.length === 0 && relevantConsom.length === 0) return null;
+
+                  return (
+                    <div className="space-y-4">
+                      {/* Health */}
+                      {(relevantVaccins.length > 0 || relevantTraits.length > 0) && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-primary/80 px-1">
+                            <Syringe className="h-4 w-4" />
+                            <span>Historique Santé</span>
+                          </div>
+                          <div className="bg-muted/30 rounded-xl overflow-hidden divide-y divide-border/50 border border-border/50">
+                            {relevantVaccins.map(v => (
+                              <div key={v.id} className="p-3 flex justify-between items-center text-sm">
+                                <div className="flex items-center gap-2">
+                                  <Syringe className="h-3 w-3 text-destructive" />
+                                  <span>{v.nom}</span>
+                                </div>
+                                <span className="text-muted-foreground">{format(new Date(v.date), 'dd/MM/yy', { locale: fr })}</span>
+                              </div>
+                            ))}
+                            {relevantTraits.map(t => (
+                              <div key={t.id} className="p-3 flex justify-between items-center text-sm">
+                                <div className="flex items-center gap-2">
+                                  <Pill className="h-3 w-3 text-warning" />
+                                  <span>{t.nom} ({t.medicament})</span>
+                                </div>
+                                <span className="text-muted-foreground">{format(new Date(t.date), 'dd/MM/yy', { locale: fr })}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Feed */}
+                      {relevantConsom.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-success/80 px-1">
+                            <ShoppingBasket className="h-4 w-4" />
+                            <span>Consommation Alimentaire</span>
+                          </div>
+                          <div className="bg-muted/30 rounded-xl overflow-hidden divide-y divide-border/50 border border-border/50">
+                            {relevantConsom.map(c => {
+                              const stock = stocks.find(s => s.id === c.stockAlimentId);
+                              return (
+                                <div key={c.id} className="p-3 flex justify-between items-center text-sm">
+                                  <div className="flex items-center gap-2">
+                                    <ShoppingBasket className="h-3 w-3 text-success" />
+                                    <span>{stock?.nom || 'Aliment'}</span>
+                                  </div>
+                                  <span className="font-medium">{c.quantiteSacs} sacs</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {details}
 
