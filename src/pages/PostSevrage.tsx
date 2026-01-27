@@ -10,7 +10,7 @@ import { ConstraintErrorDialog } from '@/components/ui/ConstraintErrorDialog';
 import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
 import { isConstraintError } from '@/lib/api';
-import { LotPostSevrage, Pesee, LotEngraissement, Mortalite } from '@/types';
+import { LotPostSevrage, Pesee, LotEngraissement, Mortalite, ConsommationAliment, StockAliment } from '@/types';
 import { Plus, Scale, TrendingUp, Calendar, Target, Eye, Search, Edit2, Trash2, ArrowRight, CheckCircle, Skull } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, differenceInDays } from 'date-fns';
@@ -44,6 +44,8 @@ const PostSevrage = () => {
   const [isLotDialogOpen, setIsLotDialogOpen] = useState(false);
   const [isPeseeDialogOpen, setIsPeseeDialogOpen] = useState(false);
   const [selectedLotId, setSelectedLotId] = useState<string | null>(null);
+  const [consommations, setConsommations] = useState<ConsommationAliment[]>([]);
+  const [stocks, setStocks] = useState<StockAliment[]>([]);
   const [detailLot, setDetailLot] = useState<LotPostSevrage | null>(null);
   const [search, setSearch] = useState('');
   const [editingLot, setEditingLot] = useState<LotPostSevrage | null>(null);
@@ -111,15 +113,18 @@ const PostSevrage = () => {
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
   }, []);
-
   const loadData = async () => {
     try {
-      const [lotsData, peseesData] = await Promise.all([
+      const [lotsData, peseesData, consomData, stocksData] = await Promise.all([
         api.getLotsPostSevrage(),
-        api.getPesees()
+        api.getPesees(),
+        api.getConsommations(),
+        api.getStockAliments()
       ]);
       setLots(lotsData.sort((a, b) => new Date(b.dateCreation).getTime() - new Date(a.dateCreation).getTime()));
       setPesees(peseesData);
+      setConsommations(consomData);
+      setStocks(stocksData);
     } catch (error) {
       console.error(error);
       toast.error('Erreur lors du chargement des données');
@@ -669,6 +674,24 @@ const PostSevrage = () => {
     return lotPesees[lotPesees.length - 1].poidsMoyen;
   };
 
+  const calculateIC = (lot: LotPostSevrage): number | null => {
+    const lotConsommations = consommations.filter(c => c.lotPostSevrageId === lot.id);
+    if (lotConsommations.length === 0) return null;
+
+    const totalAlimentKg = lotConsommations.reduce((sum, c) => {
+      const stock = stocks.find(s => s.id === c.stockAlimentId);
+      const poidsSac = stock ? stock.poidsSac : 40;
+      return sum + (c.quantiteSacs * poidsSac);
+    }, 0);
+
+    const currentWeight = getLastWeight(lot.id) || lot.poidsEntree;
+    const weightGain = (lot.nombreActuel * currentWeight) - (lot.nombreInitial * lot.poidsEntree);
+    
+    if (weightGain <= 0) return null;
+
+    return Math.round((totalAlimentKg / weightGain) * 100) / 100;
+  };
+
   const lotsEnCours = lots.filter(l => l.statut === 'en_cours');
   const totalAnimaux = lotsEnCours.reduce((sum, l) => sum + l.nombreActuel, 0);
 
@@ -1068,6 +1091,28 @@ const PostSevrage = () => {
                     </div>
                   </div>
 
+                  <div className="grid grid-cols-1 gap-4">
+                    <div className="p-4 rounded-2xl bg-success/10 border border-success/20">
+                      <p className="text-sm font-medium text-success mb-1">Indice de Consommation (IC)</p>
+                      <div className="flex items-end gap-2">
+                        <p className="text-3xl font-bold text-success">
+                          {calculateIC(detailLot) || 'N/A'}
+                        </p>
+                        <p className="text-xs text-success/70 mb-1.5">kg aliment / kg gain</p>
+                      </div>
+                      <p className="text-[10px] text-success/60 mt-1 uppercase tracking-wider">
+                        {(() => {
+                          const ic = calculateIC(detailLot);
+                          if (!ic) return "Pas assez de données";
+                          if (ic <= 2.0) return "Excellent";
+                          if (ic <= 2.4) return "Bon";
+                          if (ic <= 2.8) return "Moyen";
+                          return "À surveiller (Elevé)";
+                        })()}
+                      </p>
+                    </div>
+                  </div>
+
                   {/* Progress bar */}
                   {(() => {
                     const lastWeight = getLastWeight(detailLot.id);
@@ -1230,6 +1275,20 @@ const PostSevrage = () => {
                       )}>
                         {statusLabels[lot.statut]}
                       </span>
+                      {(() => {
+                        const ic = calculateIC(lot);
+                        if (ic !== null) {
+                          return (
+                            <span className={cn(
+                              "px-3 py-1 rounded-full text-xs font-bold border ml-2",
+                              ic <= 2.2 ? "bg-success/20 text-success border-success/30" : "bg-warning/20 text-warning border-warning/30"
+                            )}>
+                              IC: {ic}
+                            </span>
+                          );
+                        }
+                        return null;
+                      })()}
                       <Button
                         variant="ghost"
                         size="icon"

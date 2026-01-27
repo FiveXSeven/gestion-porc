@@ -10,7 +10,7 @@ import { ConstraintErrorDialog } from '@/components/ui/ConstraintErrorDialog';
 import { useAlertNotifications } from '@/contexts/AlertNotificationContext';
 import * as api from '@/lib/api';
 import { isConstraintError } from '@/lib/api';
-import { LotEngraissement, Pesee, Mortalite } from '@/types';
+import { LotEngraissement, Pesee, Mortalite, ConsommationAliment, StockAliment } from '@/types';
 import { Plus, Scale, TrendingUp, Calendar, Target, Eye, Search, Edit2, Trash2, CheckCircle, Skull } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, differenceInDays } from 'date-fns';
@@ -38,6 +38,8 @@ const Engraissement = () => {
   const { refreshAlerts } = useAlertNotifications();
   const [lots, setLots] = useState<LotEngraissement[]>([]);
   const [pesees, setPesees] = useState<Pesee[]>([]);
+  const [consommations, setConsommations] = useState<ConsommationAliment[]>([]);
+  const [stocks, setStocks] = useState<StockAliment[]>([]);
   const [isLotDialogOpen, setIsLotDialogOpen] = useState(false);
   const [isPeseeDialogOpen, setIsPeseeDialogOpen] = useState(false);
   const [selectedLotId, setSelectedLotId] = useState<string | null>(null);
@@ -100,12 +102,16 @@ const Engraissement = () => {
 
   const loadData = async () => {
     try {
-      const [lotsData, peseesData] = await Promise.all([
+      const [lotsData, peseesData, consomData, stocksData] = await Promise.all([
         api.getLotsEngraissement(),
-        api.getPesees()
+        api.getPesees(),
+        api.getConsommations(),
+        api.getStockAliments()
       ]);
       setLots(lotsData.sort((a, b) => new Date(b.dateCreation).getTime() - new Date(a.dateCreation).getTime()));
       setPesees(peseesData);
+      setConsommations(consomData);
+      setStocks(stocksData);
     } catch (error) {
       console.error(error);
       toast.error('Erreur lors du chargement des données');
@@ -528,6 +534,23 @@ const Engraissement = () => {
     ? Math.round((gmqValues.reduce((a, b) => a + b, 0) / gmqValues.length) * 1000) / 1000
     : 0.80; // Default fallback for Engraissement (higher than PS)
 
+  const calculateIC = (lot: LotEngraissement): number | null => {
+    const lotConsommations = consommations.filter(c => c.lotEngraissementId === lot.id);
+    if (lotConsommations.length === 0) return null;
+
+    const totalAlimentKg = lotConsommations.reduce((sum, c) => {
+      const stock = stocks.find(s => s.id === c.stockAlimentId);
+      const poidsSac = stock ? stock.poidsSac : 40;
+      return sum + (c.quantiteSacs * poidsSac);
+    }, 0);
+
+    const weightGain = (lot.nombreActuel * (getLastWeight(lot.id) || lot.poidsEntree)) - (lot.nombreInitial * lot.poidsEntree);
+    
+    if (weightGain <= 0) return null;
+
+    return Math.round((totalAlimentKg / weightGain) * 100) / 100;
+  };
+
   return (
     <MainLayout>
       <div className="space-y-6">
@@ -853,6 +876,28 @@ const Engraissement = () => {
                     </div>
                   </div>
 
+                  <div className="grid grid-cols-1 gap-4">
+                    <div className="p-4 rounded-2xl bg-success/10 border border-success/20">
+                      <p className="text-sm font-medium text-success mb-1">Indice de Consommation (IC)</p>
+                      <div className="flex items-end gap-2">
+                        <p className="text-3xl font-bold text-success">
+                          {calculateIC(detailLot) || 'N/A'}
+                        </p>
+                        <p className="text-xs text-success/70 mb-1.5">kg aliment / kg gain</p>
+                      </div>
+                      <p className="text-[10px] text-success/60 mt-1 uppercase tracking-wider">
+                        {(() => {
+                          const ic = calculateIC(detailLot);
+                          if (!ic) return "Pas assez de données";
+                          if (ic <= 3.0) return "Excellent";
+                          if (ic <= 3.4) return "Bon";
+                          if (ic <= 3.8) return "Moyen";
+                          return "À surveiller (Elevé)";
+                        })()}
+                      </p>
+                    </div>
+                  </div>
+
                   {/* Chart */}
                   <div className="h-64">
                     <h4 className="font-semibold text-foreground mb-3">Évolution du poids</h4>
@@ -961,6 +1006,20 @@ const Engraissement = () => {
                       )}>
                         {statusLabels[lot.statut]}
                       </span>
+                      {(() => {
+                        const ic = calculateIC(lot);
+                        if (ic !== null) {
+                          return (
+                            <span className={cn(
+                              "px-3 py-1 rounded-full text-xs font-bold border ml-2",
+                              ic <= 3.2 ? "bg-success/20 text-success border-success/30" : "bg-warning/20 text-warning border-warning/30"
+                            )}>
+                              IC: {ic}
+                            </span>
+                          );
+                        }
+                        return null;
+                      })()}
                       <Button
                         variant="ghost"
                         size="icon"

@@ -14,6 +14,7 @@ import { Plus, Package, AlertTriangle, Edit2, Trash2, Search, Minus, ArrowDown, 
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const StockAlimentPage = () => {
   const [stocks, setStocks] = useState<StockAliment[]>([]);
@@ -24,6 +25,11 @@ const StockAlimentPage = () => {
     quantite: '',
     poidsSac: '40', // Default to 40kg
   });
+  const [lotsEngraissement, setLotsEngraissement] = useState<api.LotEngraissement[]>([]);
+  const [lotsPostSevrage, setLotsPostSevrage] = useState<api.LotPostSevrage[]>([]);
+  const [useForFeeding, setUseForFeeding] = useState(false);
+  const [selectedLotId, setSelectedLotId] = useState('');
+  const [selectedLotType, setSelectedLotType] = useState<'engraissement' | 'post-sevrage'>('engraissement');
   const [search, setSearch] = useState('');
   const [editingStock, setEditingStock] = useState<StockAliment | null>(null);
 
@@ -55,11 +61,17 @@ const StockAlimentPage = () => {
 
   const loadStocks = async () => {
     try {
-      const data = await api.getStockAliments();
-      setStocks(data.sort((a, b) => new Date(b.dateMiseAJour).getTime() - new Date(a.dateMiseAJour).getTime()));
+      const [stocksData, engraissementData, postSevrageData] = await Promise.all([
+        api.getStockAliments(),
+        api.getLotsEngraissement(),
+        api.getLotsPostSevrage()
+      ]);
+      setStocks(stocksData.sort((a, b) => new Date(b.dateMiseAJour).getTime() - new Date(a.dateMiseAJour).getTime()));
+      setLotsEngraissement(engraissementData.filter(l => l.statut === 'en_cours'));
+      setLotsPostSevrage(postSevrageData.filter(l => l.statut === 'en_cours'));
     } catch (error) {
       console.error(error);
-      toast.error('Erreur lors du chargement des stocks');
+      toast.error('Erreur lors du chargement des données');
     }
   };
 
@@ -198,6 +210,8 @@ const StockAlimentPage = () => {
       stock,
     });
     setMovementAmount('');
+    setUseForFeeding(false);
+    setSelectedLotId('');
   };
 
   const handleMovementSubmit = async (e: React.FormEvent) => {
@@ -228,6 +242,21 @@ const StockAlimentPage = () => {
         quantite: newQty,
         dateMiseAJour: new Date().toISOString().split('T')[0],
       });
+
+      // Record consumption if it's for feeding
+      if (movementDialog.type === 'remove' && useForFeeding && selectedLotId) {
+        await api.addConsommation({
+          id: '',
+          date: new Date().toISOString().split('T')[0],
+          quantiteSacs: amount,
+          stockAlimentId: movementDialog.stock.id,
+          lotEngraissementId: selectedLotType === 'engraissement' ? selectedLotId : undefined,
+          lotPostSevrageId: selectedLotType === 'post-sevrage' ? selectedLotId : undefined,
+          notes: `Consommation pour lot ${selectedLotType === 'engraissement' 
+            ? lotsEngraissement.find(l => l.id === selectedLotId)?.identification 
+            : lotsPostSevrage.find(l => l.id === selectedLotId)?.identification}`
+        });
+      }
 
       toast.success(movementDialog.type === 'add' ? 'Stock renforcé' : 'Sacs retirés du stock');
       setMovementDialog({ isOpen: false, type: 'add', stock: null });
@@ -358,6 +387,68 @@ const StockAlimentPage = () => {
                     onChange={(e) => setMovementAmount(e.target.value)}
                   />
                 </div>
+
+                {movementDialog.type === 'remove' && (
+                  <div className="space-y-4 py-2 border-t border-border mt-2">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox 
+                        id="useForFeeding" 
+                        checked={useForFeeding}
+                        onCheckedChange={(checked) => setUseForFeeding(checked as boolean)}
+                      />
+                      <Label htmlFor="useForFeeding" className="text-sm font-medium cursor-pointer">
+                        Utilisé pour l'alimentation d'un lot
+                      </Label>
+                    </div>
+
+                    {useForFeeding && (
+                      <div className="space-y-3 animate-fade-in">
+                        <div className="space-y-2">
+                          <Label className="text-xs uppercase tracking-wider text-muted-foreground">Type de Lot</Label>
+                          <Select 
+                            value={selectedLotType} 
+                            onValueChange={(value: any) => {
+                              setSelectedLotType(value);
+                              setSelectedLotId('');
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Choisir le type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="engraissement">Engraissement</SelectItem>
+                              <SelectItem value="post-sevrage">Post-Sevrage</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs uppercase tracking-wider text-muted-foreground">Sélectionner le Lot</Label>
+                          <Select value={selectedLotId} onValueChange={setSelectedLotId}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Choisir le lot" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {selectedLotType === 'engraissement' 
+                                ? lotsEngraissement.map(l => (
+                                    <SelectItem key={l.id} value={l.id}>{l.identification}</SelectItem>
+                                  ))
+                                : lotsPostSevrage.map(l => (
+                                    <SelectItem key={l.id} value={l.id}>{l.identification}</SelectItem>
+                                  ))
+                              }
+                              {((selectedLotType === 'engraissement' && lotsEngraissement.length === 0) || 
+                                (selectedLotType === 'post-sevrage' && lotsPostSevrage.length === 0)) && (
+                                <p className="text-xs text-center py-2 text-muted-foreground">Aucun lot en cours</p>
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex justify-end gap-3">
                   <Button type="button" variant="outline" onClick={() => setMovementDialog(prev => ({ ...prev, isOpen: false }))}>Annuler</Button>
                   <Button type="submit" variant={movementDialog.type === 'remove' ? 'destructive' : 'default'}>Confirmer</Button>
